@@ -160,6 +160,7 @@ int main(int argc, char** argv)
 			continue;
 		LOG(INFO) << "Pattern: " << r.count << " occurences, mean = " << r.mean << "; minmax: " << r.min_return << "/" << r.max_return << "; median: " << r.median;
 		LOG(INFO) << "+ returns: " << (double)r.pos_returns / r.count << "; p-value: " << r.p;
+		LOG(INFO) << "min low: " << r.min_low << "; max high: " << r.max_high;
 		int i = 0;
 		for(const auto& e : r.elements)
 		{

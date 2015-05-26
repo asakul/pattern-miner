@@ -27,6 +27,9 @@ public:
 		double min_return;
 		double max_return;
 		double median;
+
+		double min_low;
+		double max_high;
 	};
 
 	Miner(double candleFit, double volumeFit, int patternLength, int limit);
