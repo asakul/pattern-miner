@@ -32,9 +32,10 @@ find_package(Boost COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(3rdparty)
 
-
 set(sources
 	log.cpp
+
+	3rdparty/lodepng/lodepng.cpp
 
 	model/quotes.cpp
 	miner.cpp

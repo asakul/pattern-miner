@@ -32,16 +32,28 @@ public:
 		double max_high;
 	};
 
-	Miner(double candleFit, double volumeFit, int patternLength, int limit);
+	struct Params
+	{
+		Params() : candleFit(0.1), volumeFit(0),
+			patternLength(2),
+			limit(-1),
+			exitAfter(1)
+		{
+		}
+		double candleFit;
+		double volumeFit;
+		int patternLength;
+		double limit;
+		int exitAfter;
+	};
+
+	Miner(const Params& p);
 	virtual ~Miner();
 
 	std::vector<Result> mine(Quotes& q);
 
 private:
-	double m_candleFit;
-	double m_volumeFit;
-	int m_patternLength;
-	int m_limit;
+	Params m_params;
 };
 
 #endif
