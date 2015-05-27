@@ -20,6 +20,8 @@ public:
 	{
 		std::vector<FitElement> elements;
 		double mean;
+		double mean_pos;
+		double mean_neg;
 		int count;
 		int pos_returns;
 		double p;

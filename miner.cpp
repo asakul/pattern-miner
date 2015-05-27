@@ -90,6 +90,8 @@ std::vector<Miner::Result> Miner::mine(Quotes& q)
 		double max_return = -1.0;
 		double min_low = 1.0;
 		double max_high = -1.0;
+		double mean_pos = 0;
+		double mean_neg = 0;
 		int pos_returns = 0;
 		int neg_returns = 0;
 		std::vector<double> returns;
@@ -117,18 +119,32 @@ std::vector<Miner::Result> Miner::mine(Quotes& q)
 				min_low = std::min(min_low, this_low);
 				max_high = std::max(max_high, this_high);
 				if(this_return > 0)
+				{
+					mean_pos += this_return;
 					pos_returns++;
+				}
 				if(this_return <= 0)
+				{
+					mean_neg += this_return;
 					neg_returns++;
+				}
 				mean += this_return;
 				returns.push_back(this_return);
 				counter++;
 				scanned[scanPos] = 1;
 			}
 		}
-		mean /= counter;
+		if(pos_returns > 0)
+		{
+			mean_pos /= pos_returns;
+		}
+		if(neg_returns > 0)
+		{
+			mean_neg /= neg_returns;
+		}
 		if(counter > 1)
 		{
+			mean /= counter;
 			double sigma = sqrt(counter);
 			double q = fabs(pos_returns - (double)counter / 2) / sigma;
 			double p = (1 - erf(q));
@@ -146,6 +162,8 @@ std::vector<Miner::Result> Miner::mine(Quotes& q)
 			r.max_return = max_return;
 			r.min_low = min_low;
 			r.max_high = max_high;
+			r.mean_pos = mean_pos;
+			r.mean_neg = mean_neg;
 			if((counter % 2) == 0)
 			{
 				r.median = 0.5 * (returns[counter / 2 - 1] + returns[counter / 2]);

@@ -2,6 +2,7 @@
 #include "log.h"
 #include "model/quotes.h"
 #include "miner.h"
+#include "miners/ttminer.h"
 #include "optionparser/optionparser.h"
 #include <boost/lexical_cast.hpp>
 
@@ -76,10 +77,13 @@ struct Arg: public option::Arg
 	}
 };
 
+enum MinerType { minerCandle, minerTime };
+
 enum  optionIndex { UNKNOWN, HELP, INPUT_FILENAME, CANDLE_TOLERANCE, VOLUME_TOLERANCE, PATTERN_LENGTH,
 	DEBUG_MODE, SEARCH_LIMIT,
 	FILTER_P, FILTER_MEAN, FILTER_COUNT,
-	EXIT_AFTER };
+	EXIT_AFTER,
+	MINER_TYPE };
 const option::Descriptor usage[] = {
 { UNKNOWN, 0,"", "",        Arg::Unknown, "USAGE: patter-miner [options]\n\n"
                                           "Options:" },
@@ -98,6 +102,7 @@ const option::Descriptor usage[] = {
 { FILTER_MEAN ,0,"","filter-mean",Arg::Double,"  --filter-mean=<num>  \tFilter out results, which mean absolute value is lower than specified." },
 { FILTER_COUNT ,0,"","filter-count",Arg::Numeric,"  --filter-count=<num>  \tFilter out results that occured less times than specified." },
 { EXIT_AFTER ,0,"","exit-after",Arg::Numeric,"  --exit-after=<num>  \tSpecifies how many periods to hold position." },
+{ MINER_TYPE ,0,"","miner-type",Arg::Required,"  --miner-type={c,t}  \tSpecifies miner type (default is 'c')." },
 
 { 0, 0, 0, 0, 0, 0 } };
 
@@ -108,15 +113,18 @@ struct Settings
 		debugMode(false),
 		filterP(-1),
 		filterMean(-1),
-		filterCount(-1)
+		filterCount(-1),
+		minerType(minerCandle)
 	{
 	}
 	Miner::Params minerParams;
+	TtMiner::Params ttminerParams;
 	std::string inputFilename;
 	bool debugMode;
 	double filterP;
 	double filterMean;
 	int filterCount;
+	MinerType minerType;
 };
 
 static Settings parseOptions(int argc, char** argv)
@@ -147,17 +155,41 @@ static Settings parseOptions(int argc, char** argv)
 	}
 	settings.inputFilename = options[INPUT_FILENAME].arg;
 
+	if(options[MINER_TYPE])
+	{
+		if(options[MINER_TYPE].arg[0] == 'c')
+		{
+			settings.minerType = minerCandle;
+		}
+		else if(options[MINER_TYPE].arg[0] == 't')
+		{
+			settings.minerType = minerTime;
+		}
+		else
+		{
+			throw std::runtime_error("Miner type should be 'c' or 't'");
+		}
+	}
+
 	if(!options[PATTERN_LENGTH])
 	{
-		throw std::runtime_error("Should specify pattern length (--pattern-length)");
+		if(settings.minerType == minerCandle)
+			throw std::runtime_error("Should specify pattern length (--pattern-length)");
 	}
-	settings.minerParams.patternLength = lexical_cast<int>(options[PATTERN_LENGTH].arg);
+	else
+	{
+		settings.minerParams.patternLength = lexical_cast<int>(options[PATTERN_LENGTH].arg);
+	}
 
 	if(!options[CANDLE_TOLERANCE])
 	{
-		throw std::runtime_error("Should specify candle tolerance factor (--candle-tolerance)");
+		if(settings.minerType == minerCandle)
+			throw std::runtime_error("Should specify candle tolerance factor (--candle-tolerance)");
 	}
-	settings.minerParams.candleFit = lexical_cast<double>(options[CANDLE_TOLERANCE].arg);
+	else
+	{
+		settings.minerParams.candleFit = lexical_cast<double>(options[CANDLE_TOLERANCE].arg);
+	}
 	if(options[VOLUME_TOLERANCE])
 	{
 		settings.minerParams.volumeFit = lexical_cast<double>(options[VOLUME_TOLERANCE].arg);
@@ -166,6 +198,7 @@ static Settings parseOptions(int argc, char** argv)
 	if(options[SEARCH_LIMIT])
 	{
 		settings.minerParams.limit = lexical_cast<double>(options[SEARCH_LIMIT].arg);
+		settings.ttminerParams.limit = lexical_cast<double>(options[SEARCH_LIMIT].arg);
 	}
 
 	if(options[FILTER_P])
@@ -191,7 +224,9 @@ static Settings parseOptions(int argc, char** argv)
 			throw std::runtime_error("--exit-after should take values between 1 and 100");
 		}
 		settings.minerParams.exitAfter = exitAfter;
+		settings.ttminerParams.exitAfter = exitAfter;
 	}
+
 
 	settings.debugMode = options[DEBUG_MODE] ? true : false;
 	return settings;
@@ -210,42 +245,81 @@ int main(int argc, char** argv)
 
 	LOG(INFO) << "Loaded " << q.name() << ", " << q.length() << " points";
 
-	Miner m(s.minerParams);
-	auto result = m.mine(q);
-
-	std::sort(result.begin(), result.end(), [] (const Miner::Result& r1, const Miner::Result& r2) {
-				return r1.count > r2.count;
-			});
-
-	for(const auto& r : result)
+	if(s.minerType == minerCandle)
 	{
-		if(s.filterP > 0)
-		{
-			if(r.p > s.filterP)
-				continue;
-		}
+		Miner m(s.minerParams);
+		auto result = m.mine(q);
 
-		if(s.filterMean > 0)
-		{
-			if(fabs(r.mean) < s.filterMean)
-				continue;
-		}
+		std::sort(result.begin(), result.end(), [] (const Miner::Result& r1, const Miner::Result& r2) {
+				return r1.count > r2.count;
+				});
 
-		if(s.filterCount > 0)
+		for(const auto& r : result)
 		{
-			if(r.count < s.filterCount)
-				continue;
-		}
+			if(s.filterP > 0)
+			{
+				if(r.p > s.filterP)
+					continue;
+			}
 
-		LOG(INFO) << "Pattern: " << r.count << " occurences, mean = " << r.mean << "; minmax: " << r.min_return << "/" << r.max_return << "; median: " << r.median;
-		LOG(INFO) << "+ returns: " << (double)r.pos_returns / r.count << "; p-value: " << r.p;
-		LOG(INFO) << "min low: " << r.min_low << "; max high: " << r.max_high;
-		int i = 0;
-		for(const auto& e : r.elements)
+			if(s.filterMean > 0)
+			{
+				if(fabs(r.mean) < s.filterMean)
+					continue;
+			}
+
+			if(s.filterCount > 0)
+			{
+				if(r.count < s.filterCount)
+					continue;
+			}
+
+			LOG(INFO) << "Pattern: " << r.count << " occurences, mean = " << r.mean << "; minmax: " << r.min_return << "/" << r.max_return << "; median: " << r.median;
+			LOG(INFO) << "+ returns: " << (double)r.pos_returns / r.count << "; p-value: " << r.p;
+			LOG(INFO) << "min low: " << r.min_low << "; max high: " << r.max_high;
+			LOG(INFO) << "mean +: " << r.mean_pos << "; mean -: " << r.mean_neg;
+			int i = 0;
+			for(const auto& e : r.elements)
+			{
+				LOG(INFO) << "C" << i << ": OHLCV:" << e.open << ":" <<
+					e.high << ":" << e.low << ":" << e.close << ":" << e.volume;
+				i++;
+			}
+		}
+	}
+	else if(s.minerType == minerTime)
+	{
+		TtMiner m(s.ttminerParams);
+		auto result = m.mine(q);
+
+		std::sort(result.begin(), result.end(), [] (const TtMiner::Result& r1, const TtMiner::Result& r2) {
+				return r1.count > r2.count;
+				});
+
+		for(const auto& r : result)
 		{
-			LOG(INFO) << "C" << i << ": OHLCV:" << e.open << ":" <<
-				e.high << ":" << e.low << ":" << e.close << ":" << e.volume;
-			i++;
+			if(s.filterP > 0)
+			{
+				if(r.p > s.filterP)
+					continue;
+			}
+
+			if(s.filterMean > 0)
+			{
+				if(fabs(r.mean) < s.filterMean)
+					continue;
+			}
+
+			if(s.filterCount > 0)
+			{
+				if(r.count < s.filterCount)
+					continue;
+			}
+
+			LOG(INFO) << "Pattern: " << r.count << " occurences, mean = " << r.mean << "; minmax: " << r.min_return << "/" << r.max_return << "; median: " << r.median;
+			LOG(INFO) << "+ returns: " << (double)r.pos_returns / r.count << "; p-value: " << r.p;
+			LOG(INFO) << "min low: " << r.min_low << "; max high: " << r.max_high;
+			LOG(INFO) << "T: " << (r.time / 3600) << ":" << (r.time - 3600 * (r.time / 3600)) / 60;
 		}
 	}
 }

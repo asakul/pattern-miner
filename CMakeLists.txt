@@ -38,6 +38,7 @@ set(sources
 	3rdparty/lodepng/lodepng.cpp
 
 	model/quotes.cpp
+	miners/ttminer.cpp
 	miner.cpp
 	)
 	

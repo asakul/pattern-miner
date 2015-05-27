@@ -3,6 +3,7 @@
 #include <fstream>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
+#include <time.h>
 #include "log.h"
 
 using namespace boost::algorithm;
@@ -21,7 +22,22 @@ size_t getIndex(const std::vector<T>& v, const T& value)
 
 static TimePoint parseTime(const std::string& date, const std::string& time)
 {
-	return TimePoint(0, 0);
+	int year = lexical_cast<int>(date.substr(0, 4));
+	int month = lexical_cast<int>(date.substr(4, 2));
+	int day = lexical_cast<int>(date.substr(6, 2));
+	int hour = lexical_cast<int>(time.substr(0, 2));
+	int minute = lexical_cast<int>(time.substr(2, 2));
+	int second = lexical_cast<int>(time.substr(4, 2));
+
+	struct tm tm;
+	tm.tm_year = year - 1900;
+	tm.tm_mon = month - 1;
+	tm.tm_mday = day;
+	tm.tm_hour = hour;
+	tm.tm_min = minute;
+	tm.tm_sec = second;
+
+	return TimePoint(timegm(&tm), 0);
 }
 
 Quotes::Quotes(const std::string& name) : m_name(name)
@@ -38,7 +54,7 @@ void Quotes::loadFromCsv(const std::string& filename)
 	in.open(filename.c_str(), std::ios_base::in);
 	if(!in.good())
 		throw std::runtime_error("Unable to open file: " + filename);
-	
+
 	std::string header;
 	std::getline(in, header);
 
@@ -83,7 +99,8 @@ void Quotes::loadFromCsv(const std::string& filename)
 				lexical_cast<price_t>(strHigh),
 				lexical_cast<price_t>(strLow),
 				lexical_cast<price_t>(strClose),
-				lexical_cast<unsigned int>(trim_copy(strVolume)));
+				lexical_cast<unsigned int>(trim_copy(strVolume)),
+				candleTime);
 	}
 }
 
