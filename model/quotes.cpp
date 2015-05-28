@@ -99,12 +99,17 @@ void Quotes::loadFromCsv(const std::string& filename)
 				lexical_cast<price_t>(strHigh),
 				lexical_cast<price_t>(strLow),
 				lexical_cast<price_t>(strClose),
-				lexical_cast<unsigned int>(trim_copy(strVolume)),
+				lexical_cast<unsigned long>(trim_copy(strVolume)),
 				candleTime);
 	}
 }
 
 Candle Quotes::operator[](size_t index) const
+{
+	return m_candles[index];
+}
+
+Candle Quotes::at(size_t index) const
 {
 	return m_candles[index];
 }

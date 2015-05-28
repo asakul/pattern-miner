@@ -20,6 +20,8 @@ public:
 	{
 		std::vector<FitElement> elements;
 		double mean;
+		double sigma;
+		double mean_p;
 		double mean_pos;
 		double mean_neg;
 		int count;
@@ -52,7 +54,7 @@ public:
 	Miner(const Params& p);
 	virtual ~Miner();
 
-	std::vector<Result> mine(Quotes& q);
+	std::vector<Result> mine(std::list<Quotes::Ptr>& qlist);
 
 private:
 	Params m_params;

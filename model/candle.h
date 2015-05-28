@@ -18,7 +18,7 @@ struct TimePoint
 
 struct Candle
 {
-	Candle(price_t o, price_t h, price_t l, price_t c, unsigned int vol, TimePoint t) : 
+	Candle(price_t o, price_t h, price_t l, price_t c, unsigned long vol, TimePoint t) : 
 		open(o),
 		high(h),
 		low(l),
@@ -32,7 +32,7 @@ struct Candle
 	price_t high;
 	price_t low;
 	price_t close;
-	unsigned int volume;
+	unsigned long volume;
 	TimePoint time;
 };
 

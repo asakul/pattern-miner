@@ -119,7 +119,7 @@ struct Settings
 	}
 	Miner::Params minerParams;
 	TtMiner::Params ttminerParams;
-	std::string inputFilename;
+	std::list<std::string> inputFilename;
 	bool debugMode;
 	double filterP;
 	double filterMean;
@@ -153,7 +153,10 @@ static Settings parseOptions(int argc, char** argv)
 	{
 		throw std::runtime_error("Should specify input filename (--input-filename)");
 	}
-	settings.inputFilename = options[INPUT_FILENAME].arg;
+	for(option::Option* opt = options[INPUT_FILENAME].first(); opt; opt = opt->next())
+	{
+		settings.inputFilename.push_back(std::string(opt->arg));
+	}
 
 	if(options[MINER_TYPE])
 	{
@@ -240,13 +243,19 @@ int main(int argc, char** argv)
 
 	initLogging("pattern-mining.log", s.debugMode);
 
-	Quotes q;
-	q.loadFromCsv(s.inputFilename);
+	std::list<Quotes::Ptr> q;
+	for(const auto& fname : s.inputFilename)
+	{
+		auto tq = std::make_shared<Quotes>();
+		tq->loadFromCsv(fname);
+		q.push_back(tq);
+		LOG(INFO) << "Loaded " << tq->name() << ", " << tq->length() << " points";
+	}
 
-	LOG(INFO) << "Loaded " << q.name() << ", " << q.length() << " points";
 
 	if(s.minerType == minerCandle)
 	{
+		LOG(DEBUG) << "Limit: " << s.minerParams.limit;
 		Miner m(s.minerParams);
 		auto result = m.mine(q);
 
@@ -274,7 +283,9 @@ int main(int argc, char** argv)
 					continue;
 			}
 
-			LOG(INFO) << "Pattern: " << r.count << " occurences, mean = " << r.mean << "; minmax: " << r.min_return << "/" << r.max_return << "; median: " << r.median;
+			LOG(INFO) << "Pattern: " << r.count << " occurences";
+			LOG(INFO) << "mean = " << r.mean << "; rejecting H0 at p-value: " << r.mean_p << "; sigma = " << r.sigma;
+			LOG(INFO) << "Minmax returns: " << r.min_return << "/" << r.max_return << "; median return: " << r.median;
 			LOG(INFO) << "+ returns: " << (double)r.pos_returns / r.count << "; p-value: " << r.p;
 			LOG(INFO) << "min low: " << r.min_low << "; max high: " << r.max_high;
 			LOG(INFO) << "mean +: " << r.mean_pos << "; mean -: " << r.mean_neg;
@@ -285,41 +296,6 @@ int main(int argc, char** argv)
 					e.high << ":" << e.low << ":" << e.close << ":" << e.volume;
 				i++;
 			}
-		}
-	}
-	else if(s.minerType == minerTime)
-	{
-		TtMiner m(s.ttminerParams);
-		auto result = m.mine(q);
-
-		std::sort(result.begin(), result.end(), [] (const TtMiner::Result& r1, const TtMiner::Result& r2) {
-				return r1.count > r2.count;
-				});
-
-		for(const auto& r : result)
-		{
-			if(s.filterP > 0)
-			{
-				if(r.p > s.filterP)
-					continue;
-			}
-
-			if(s.filterMean > 0)
-			{
-				if(fabs(r.mean) < s.filterMean)
-					continue;
-			}
-
-			if(s.filterCount > 0)
-			{
-				if(r.count < s.filterCount)
-					continue;
-			}
-
-			LOG(INFO) << "Pattern: " << r.count << " occurences, mean = " << r.mean << "; minmax: " << r.min_return << "/" << r.max_return << "; median: " << r.median;
-			LOG(INFO) << "+ returns: " << (double)r.pos_returns / r.count << "; p-value: " << r.p;
-			LOG(INFO) << "min low: " << r.min_low << "; max high: " << r.max_high;
-			LOG(INFO) << "T: " << (r.time / 3600) << ":" << (r.time - 3600 * (r.time / 3600)) / 60;
 		}
 	}
 }
