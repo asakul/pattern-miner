@@ -5,6 +5,7 @@
 #include "miners/ttminer.h"
 #include "optionparser/optionparser.h"
 #include <boost/lexical_cast.hpp>
+#include "report/textreportbuilder.h"
 
 using namespace boost;
 
@@ -83,7 +84,9 @@ enum  optionIndex { UNKNOWN, HELP, INPUT_FILENAME, CANDLE_TOLERANCE, VOLUME_TOLE
 	DEBUG_MODE, SEARCH_LIMIT,
 	FILTER_P, FILTER_MEAN, FILTER_COUNT, FILTER_MEAN_P, FILTER_TRIVIAL,
 	EXIT_AFTER,
-	MINER_TYPE };
+	MINER_TYPE,
+	OUTPUT_FILENAME
+};
 const option::Descriptor usage[] = {
 { UNKNOWN, 0,"", "",        Arg::Unknown, "USAGE: patter-miner [options]\n\n"
                                           "Options:" },
@@ -105,6 +108,7 @@ const option::Descriptor usage[] = {
 { FILTER_COUNT ,0,"","filter-count",Arg::Numeric,"  --filter-count=<num>  \tFilter out results that occured less times than specified." },
 { EXIT_AFTER ,0,"","exit-after",Arg::Numeric,"  --exit-after=<num>  \tSpecifies how many periods to hold position." },
 { MINER_TYPE ,0,"","miner-type",Arg::Required,"  --miner-type={c,t}  \tSpecifies miner type (default is 'c')." },
+{ OUTPUT_FILENAME ,0,"","output-filename",Arg::Required,"  --output-filename=<filename>  \tSpecifies filename for generated report." },
 
 { 0, 0, 0, 0, 0, 0 } };
 
@@ -131,6 +135,7 @@ struct Settings
 	double filterMeanP;
 	bool filterTrivial;
 	MinerType minerType;
+	std::string outputFilename;
 };
 
 static Settings parseOptions(int argc, char** argv)
@@ -179,6 +184,12 @@ static Settings parseOptions(int argc, char** argv)
 			throw std::runtime_error("Miner type should be 'c' or 't'");
 		}
 	}
+
+	if(!options[OUTPUT_FILENAME])
+	{
+		throw std::runtime_error("Should specify output filename (--output-filename)");
+	}
+	settings.outputFilename = options[OUTPUT_FILENAME].arg;
 
 	if(!options[PATTERN_LENGTH])
 	{
@@ -260,12 +271,14 @@ int main(int argc, char** argv)
 	initLogging("pattern-mining.log", s.debugMode);
 
 	std::list<Quotes::Ptr> q;
+	std::list<std::string> tickers;
 	for(const auto& fname : s.inputFilename)
 	{
 		auto tq = std::make_shared<Quotes>();
 		tq->loadFromCsv(fname);
 		q.push_back(tq);
 		LOG(INFO) << "Loaded " << tq->name() << ", " << tq->length() << " points";
+		tickers.push_back(tq->name());
 	}
 
 
@@ -278,6 +291,10 @@ int main(int argc, char** argv)
 		std::sort(result.begin(), result.end(), [] (const Miner::Result& r1, const Miner::Result& r2) {
 				return r1.count > r2.count;
 				});
+
+
+		auto report = std::make_shared<TextReportBuilder>();
+		report->start(s.outputFilename, TimePoint(0, 0), TimePoint(0, 0), tickers);
 
 		int patternsCount = 0;
 		for(const auto& r : result)
@@ -321,22 +338,22 @@ int main(int argc, char** argv)
 					continue;
 			}
 
-			LOG(INFO) << "Pattern: " << r.count << " occurences";
-			LOG(INFO) << "mean = " << r.mean << "; rejecting H0 at p-value: " << r.mean_p << "; sigma = " << r.sigma;
-			LOG(INFO) << "Minmax returns: " << r.min_return << "/" << r.max_return << "; median return: " << r.median;
-			LOG(INFO) << "+ returns: " << (double)r.pos_returns / r.count << "; p-value: " << r.p;
-			LOG(INFO) << "min low: " << r.min_low << "; max high: " << r.max_high;
-			LOG(INFO) << "mean +: " << r.mean_pos << "; mean -: " << r.mean_neg;
-			int i = 0;
-			for(const auto& e : r.elements)
-			{
-				LOG(INFO) << "C" << i << ": OHLCV:" << e.open << ":" <<
-					e.high << ":" << e.low << ":" << e.close << ":" << e.volume;
-				i++;
-			}
+			report->begin_element("Pattern: " + std::to_string(r.count) + " occurences");
+			report->insert_fit_elements(r.elements);
+			report->insert_text("mean = " + std::to_string(r.mean) + "; rejecting H0 at p-value: " +
+				  std::to_string(r.mean_p) + "; sigma = " + std::to_string(r.sigma));
+			report->insert_text("Minmax returns: " + std::to_string(r.min_return) + "/" + std::to_string(r.max_return) +
+					"; median return: " + std::to_string(r.median));
+			report->insert_text("+ returns: " + std::to_string((double)r.pos_returns / r.count) +
+					"; p-value: " + std::to_string(r.p));
+			report->insert_text("min low: " + std::to_string(r.min_low) + "; max high: " + std::to_string(r.max_high));
+			report->insert_text("mean +: " + std::to_string(r.mean_pos) + "; mean -: " + std::to_string(r.mean_neg));
+			report->end_element();
+
 			patternsCount += r.count;
 		}
-		LOG(INFO) << "Total patterns: " << patternsCount;
+		report->insert_text("Total patterns: " + std::to_string(patternsCount));
+		report->end();
 	}
 }
 

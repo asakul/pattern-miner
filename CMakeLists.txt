@@ -40,6 +40,8 @@ set(sources
 	model/quotes.cpp
 	miners/ttminer.cpp
 	miner.cpp
+
+	report/textreportbuilder.cpp
 	)
 	
 add_executable(pattern-mining main.cpp ${sources})
