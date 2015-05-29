@@ -6,6 +6,7 @@
 #include "optionparser/optionparser.h"
 #include <boost/lexical_cast.hpp>
 #include "report/textreportbuilder.h"
+#include "report/htmlreportbuilder.h"
 
 using namespace boost;
 
@@ -293,7 +294,7 @@ int main(int argc, char** argv)
 				});
 
 
-		auto report = std::make_shared<TextReportBuilder>();
+		auto report = std::make_shared<HtmlReportBuilder>();
 		report->start(s.outputFilename, TimePoint(0, 0), TimePoint(0, 0), tickers);
 
 		int patternsCount = 0;

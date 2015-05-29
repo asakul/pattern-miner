@@ -28,7 +28,7 @@ set (Boost_USE_MULTITHREADED ON)
 
 add_definitions(-DBOOST_THREAD_USE_LIB)
 
-find_package(Boost COMPONENTS system REQUIRED)
+find_package(Boost COMPONENTS system filesystem REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(3rdparty)
 
@@ -42,6 +42,7 @@ set(sources
 	miner.cpp
 
 	report/textreportbuilder.cpp
+	report/htmlreportbuilder.cpp
 	)
 	
 add_executable(pattern-mining main.cpp ${sources})
