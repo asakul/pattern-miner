@@ -2,16 +2,8 @@
 #define MINER_H
 
 #include "model/quotes.h"
+#include "model/fitelement.h"
 #include <list>
-
-struct FitElement
-{
-	double open;
-	double high;
-	double low;
-	double close;
-	double volume;
-};
 
 class Miner
 {

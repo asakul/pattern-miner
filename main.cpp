@@ -81,7 +81,7 @@ enum MinerType { minerCandle, minerTime };
 
 enum  optionIndex { UNKNOWN, HELP, INPUT_FILENAME, CANDLE_TOLERANCE, VOLUME_TOLERANCE, PATTERN_LENGTH,
 	DEBUG_MODE, SEARCH_LIMIT,
-	FILTER_P, FILTER_MEAN, FILTER_COUNT,
+	FILTER_P, FILTER_MEAN, FILTER_COUNT, FILTER_MEAN_P, FILTER_TRIVIAL,
 	EXIT_AFTER,
 	MINER_TYPE };
 const option::Descriptor usage[] = {
@@ -100,6 +100,8 @@ const option::Descriptor usage[] = {
 
 { FILTER_P ,0,"","filter-p",Arg::Double,"  --filter-p=<num>  \tFilter out results, which p-value is higher than specified." },
 { FILTER_MEAN ,0,"","filter-mean",Arg::Double,"  --filter-mean=<num>  \tFilter out results, which mean absolute value is lower than specified." },
+{ FILTER_MEAN_P ,0,"","filter-mean-p",Arg::Double,"  --filter-mean-p=<num>  \tFilter out results, which mean return p-value is higher than specified." },
+{ FILTER_TRIVIAL ,0,"","filter-trivial",Arg::None,"  --filter-trivial  \tFilter out trivial results (like zero-sized candles)." },
 { FILTER_COUNT ,0,"","filter-count",Arg::Numeric,"  --filter-count=<num>  \tFilter out results that occured less times than specified." },
 { EXIT_AFTER ,0,"","exit-after",Arg::Numeric,"  --exit-after=<num>  \tSpecifies how many periods to hold position." },
 { MINER_TYPE ,0,"","miner-type",Arg::Required,"  --miner-type={c,t}  \tSpecifies miner type (default is 'c')." },
@@ -114,6 +116,8 @@ struct Settings
 		filterP(-1),
 		filterMean(-1),
 		filterCount(-1),
+		filterMeanP(-1),
+		filterTrivial(false),
 		minerType(minerCandle)
 	{
 	}
@@ -124,6 +128,8 @@ struct Settings
 	double filterP;
 	double filterMean;
 	int filterCount;
+	double filterMeanP;
+	bool filterTrivial;
 	MinerType minerType;
 };
 
@@ -219,6 +225,16 @@ static Settings parseOptions(int argc, char** argv)
 		settings.filterCount = lexical_cast<double>(options[FILTER_COUNT].arg);
 	}
 
+	if(options[FILTER_MEAN_P])
+	{
+		settings.filterMeanP = lexical_cast<double>(options[FILTER_MEAN_P].arg);
+	}
+
+	if(options[FILTER_TRIVIAL])
+	{
+		settings.filterTrivial = true;
+	}
+
 	if(options[EXIT_AFTER])
 	{
 		int exitAfter = lexical_cast<int>(options[PATTERN_LENGTH].arg);
@@ -263,6 +279,7 @@ int main(int argc, char** argv)
 				return r1.count > r2.count;
 				});
 
+		int patternsCount = 0;
 		for(const auto& r : result)
 		{
 			if(s.filterP > 0)
@@ -283,6 +300,27 @@ int main(int argc, char** argv)
 					continue;
 			}
 
+			if(s.filterMeanP > 0)
+			{
+				if(r.mean_p > s.filterMeanP)
+					continue;
+			}
+
+			if(s.filterTrivial)
+			{
+				bool isTrivial = true;
+				for(const auto& e : r.elements)
+				{
+					if((e.open != 1) || (e.high != 1) || (e.low != 1) || (e.close != 1))
+					{
+						isTrivial = false;
+						break;
+					}
+				}
+				if(isTrivial)
+					continue;
+			}
+
 			LOG(INFO) << "Pattern: " << r.count << " occurences";
 			LOG(INFO) << "mean = " << r.mean << "; rejecting H0 at p-value: " << r.mean_p << "; sigma = " << r.sigma;
 			LOG(INFO) << "Minmax returns: " << r.min_return << "/" << r.max_return << "; median return: " << r.median;
@@ -296,7 +334,9 @@ int main(int argc, char** argv)
 					e.high << ":" << e.low << ":" << e.close << ":" << e.volume;
 				i++;
 			}
+			patternsCount += r.count;
 		}
+		LOG(INFO) << "Total patterns: " << patternsCount;
 	}
 }
 
