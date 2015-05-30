@@ -86,7 +86,8 @@ enum  optionIndex { UNKNOWN, HELP, INPUT_FILENAME, CANDLE_TOLERANCE, VOLUME_TOLE
 	FILTER_P, FILTER_MEAN, FILTER_COUNT, FILTER_MEAN_P, FILTER_TRIVIAL,
 	EXIT_AFTER,
 	MINER_TYPE,
-	OUTPUT_FILENAME
+	OUTPUT_FILENAME,
+	REPORT_TYPE
 };
 const option::Descriptor usage[] = {
 { UNKNOWN, 0,"", "",        Arg::Unknown, "USAGE: patter-miner [options]\n\n"
@@ -110,8 +111,16 @@ const option::Descriptor usage[] = {
 { EXIT_AFTER ,0,"","exit-after",Arg::Numeric,"  --exit-after=<num>  \tSpecifies how many periods to hold position." },
 { MINER_TYPE ,0,"","miner-type",Arg::Required,"  --miner-type={c,t}  \tSpecifies miner type (default is 'c')." },
 { OUTPUT_FILENAME ,0,"","output-filename",Arg::Required,"  --output-filename=<filename>  \tSpecifies filename for generated report." },
+{ REPORT_TYPE ,0,"","report-type",Arg::Required,"  --report-type={html,txt}  \tSpecifies report format." },
 
 { 0, 0, 0, 0, 0, 0 } };
+
+enum ReportType
+{
+	Unknown,
+	Html,
+	Txt
+};
 
 struct Settings
 {
@@ -123,7 +132,8 @@ struct Settings
 		filterCount(-1),
 		filterMeanP(-1),
 		filterTrivial(false),
-		minerType(minerCandle)
+		minerType(minerCandle),
+		reportType(Html)
 	{
 	}
 	Miner::Params minerParams;
@@ -137,6 +147,7 @@ struct Settings
 	bool filterTrivial;
 	MinerType minerType;
 	std::string outputFilename;
+	ReportType reportType;
 };
 
 static Settings parseOptions(int argc, char** argv)
@@ -258,6 +269,22 @@ static Settings parseOptions(int argc, char** argv)
 		settings.ttminerParams.exitAfter = exitAfter;
 	}
 
+	if(options[REPORT_TYPE])
+	{
+		std::string t = options[REPORT_TYPE].arg;
+		if((t == "h") || (t == "html"))
+		{
+			settings.reportType = Html;
+		}
+		else if((t == "t") || (t == "txt") || (t == "text"))
+		{
+			settings.reportType = Txt;
+		}
+		else
+		{
+			throw std::runtime_error("Unknown report type: " + t);
+		}
+	}
 
 	settings.debugMode = options[DEBUG_MODE] ? true : false;
 	return settings;
@@ -294,7 +321,13 @@ int main(int argc, char** argv)
 				});
 
 
-		auto report = std::make_shared<HtmlReportBuilder>();
+		ReportBuilder::Ptr report;
+		if(s.reportType == Html)
+			report = std::make_shared<HtmlReportBuilder>();
+		else if(s.reportType == Txt)
+			report = std::make_shared<TextReportBuilder>();
+		else
+			throw std::logic_error("Invalid report type: " + std::to_string(s.reportType));
 		report->start(s.outputFilename, TimePoint(0, 0), TimePoint(0, 0), tickers);
 
 		int patternsCount = 0;
