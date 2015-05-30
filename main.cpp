@@ -353,7 +353,8 @@ int main(int argc, char** argv)
 
 			patternsCount += r.count;
 		}
-		report->insert_text("Total patterns: " + std::to_string(patternsCount));
+		report->begin_element("Total patterns: " + std::to_string(patternsCount));
+		report->end_element();
 		report->end();
 	}
 }
