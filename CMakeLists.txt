@@ -32,6 +32,9 @@ find_package(Boost COMPONENTS system filesystem REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(3rdparty)
 
+include_directories("/usr/include/cairo")
+include_directories("/usr/include/freetype2")
+
 set(sources
 	log.cpp
 
@@ -47,4 +50,5 @@ set(sources
 	
 add_executable(pattern-mining main.cpp ${sources})
 target_link_libraries(pattern-mining  ${Boost_LIBRARIES} -lpthread -ldl)
+target_link_libraries(pattern-mining -lcairo -lfreetype)
 

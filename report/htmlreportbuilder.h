@@ -27,6 +27,7 @@ public:
 private:
 	boost::filesystem::path m_root;
 	std::fstream m_main;
+	int m_imageCounter;
 };
 
 #endif /* end of include guard: HTMLREPORTBUILDER_H_X1LDRYZB */
