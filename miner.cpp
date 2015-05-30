@@ -44,6 +44,8 @@ static bool fit(FitElement* f1, FitElement* f2, double candleTolerance, double v
 			return false;
 		if(fabs(f1[i].low - f2[i].low) > tolerance)
 			return false;
+		if((f1[i].open - f1[i].close) * (f2[i].open - f2[i].close) < 0)
+			return false;
 		if(volumeTolerance > 0)
 		{
 			if(fabs(f1[i].volume - f2[i].volume) > volumeTolerance)
