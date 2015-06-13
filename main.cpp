@@ -3,6 +3,7 @@
 #include "model/quotes.h"
 #include "miner.h"
 #include "miners/ttminer.h"
+#include "miners/minmaxminer.h"
 #include "optionparser/optionparser.h"
 #include <boost/lexical_cast.hpp>
 #include "report/textreportbuilder.h"
@@ -79,12 +80,16 @@ struct Arg: public option::Arg
 	}
 };
 
-enum MinerType { minerCandle, minerTime };
+enum MinerType { minerCandle, minerTime, minerZigzag };
 
-enum  optionIndex { UNKNOWN, HELP, INPUT_FILENAME, CANDLE_TOLERANCE, VOLUME_TOLERANCE, PATTERN_LENGTH,
+enum  optionIndex { UNKNOWN, HELP, INPUT_FILENAME, CANDLE_TOLERANCE, VOLUME_TOLERANCE,
+	TIME_TOLERANCE,
+	PATTERN_LENGTH,
 	DEBUG_MODE, SEARCH_LIMIT,
 	FILTER_P, FILTER_MEAN, FILTER_COUNT, FILTER_MEAN_P, FILTER_TRIVIAL,
+	EPSILON,
 	EXIT_AFTER,
+	ZIGZAGS,
 	MINER_TYPE,
 	OUTPUT_FILENAME,
 	REPORT_TYPE
@@ -98,6 +103,7 @@ const option::Descriptor usage[] = {
                                           "  \tSpecifies pattern length." },
 { CANDLE_TOLERANCE, 0,"c","candle-tolerance", Arg::Double, "  -c <num>, \t--candle-tolerance=<num>  \tHow precise candle features should be matched." },
 { VOLUME_TOLERANCE, 0,"o","volume-tolerance", Arg::Double, "  -o <num>, \t--volume-tolerance=<num>  \tHow precise volumes should be matched." },
+{ TIME_TOLERANCE, 0,"t","time-tolerance", Arg::Numeric, "  -t <num>, \t--time-tolerance=<num>  \tHow precise time should be matched." },
 { DEBUG_MODE, 0, "d", "debug", Arg::None, "  \t-d, \t--debug"
 											"  \tEnables debug output" },
 { SEARCH_LIMIT, 0,"s","search-limit", Arg::Double, "  -s <num>, \t--search-limit=<num>"
@@ -108,8 +114,10 @@ const option::Descriptor usage[] = {
 { FILTER_MEAN_P ,0,"","filter-mean-p",Arg::Double,"  --filter-mean-p=<num>  \tFilter out results, which mean return p-value is higher than specified." },
 { FILTER_TRIVIAL ,0,"","filter-trivial",Arg::None,"  --filter-trivial  \tFilter out trivial results (like zero-sized candles)." },
 { FILTER_COUNT ,0,"","filter-count",Arg::Numeric,"  --filter-count=<num>  \tFilter out results that occured less times than specified." },
+{ EPSILON, 0,"","epsilon", Arg::Numeric, "  --epsilon=<num>  \tRange of minmax search, in periods." },
+{ ZIGZAGS, 0,"","zigzags", Arg::Numeric, "  --zigzags=<num>  \tZigzags to find." },
 { EXIT_AFTER ,0,"","exit-after",Arg::Numeric,"  --exit-after=<num>  \tSpecifies how many periods to hold position." },
-{ MINER_TYPE ,0,"","miner-type",Arg::Required,"  --miner-type={c,t}  \tSpecifies miner type (default is 'c')." },
+{ MINER_TYPE ,0,"","miner-type",Arg::Required,"  --miner-type={c,t,z}  \tSpecifies miner type (default is 'c')." },
 { OUTPUT_FILENAME ,0,"","output-filename",Arg::Required,"  --output-filename=<filename>  \tSpecifies filename for generated report." },
 { REPORT_TYPE ,0,"","report-type",Arg::Required,"  --report-type={html,txt}  \tSpecifies report format." },
 
@@ -137,6 +145,7 @@ struct Settings
 	{
 	}
 	Miner::Params minerParams;
+	MinmaxMiner::Params minmaxParams;
 	TtMiner::Params ttminerParams;
 	std::list<std::string> inputFilename;
 	bool debugMode;
@@ -169,7 +178,7 @@ static Settings parseOptions(int argc, char** argv)
 	{
 		int columns = getenv("COLUMNS")? atoi(getenv("COLUMNS")) : 80;
 		option::printUsage(fwrite, stdout, usage, columns);
-		throw std::runtime_error("");
+		exit(0);
 	}
 
 	if(!options[INPUT_FILENAME])
@@ -190,6 +199,10 @@ static Settings parseOptions(int argc, char** argv)
 		else if(options[MINER_TYPE].arg[0] == 't')
 		{
 			settings.minerType = minerTime;
+		}
+		else if(options[MINER_TYPE].arg[0] == 'z')
+		{
+			settings.minerType = minerZigzag;
 		}
 		else
 		{
@@ -220,17 +233,30 @@ static Settings parseOptions(int argc, char** argv)
 	}
 	else
 	{
-		settings.minerParams.candleFit = lexical_cast<double>(options[CANDLE_TOLERANCE].arg);
+		settings.minmaxParams.priceTolerance = settings.minerParams.candleFit = lexical_cast<double>(options[CANDLE_TOLERANCE].arg);
 	}
 	if(options[VOLUME_TOLERANCE])
 	{
-		settings.minerParams.volumeFit = lexical_cast<double>(options[VOLUME_TOLERANCE].arg);
+		settings.minmaxParams.volumeTolerance = settings.minerParams.volumeFit = lexical_cast<double>(options[VOLUME_TOLERANCE].arg);
+	}
+	if(options[TIME_TOLERANCE])
+	{
+		settings.minmaxParams.timeTolerance = lexical_cast<int>(options[TIME_TOLERANCE].arg);
+	}
+	if(options[EPSILON])
+	{
+		settings.minmaxParams.epsilon = lexical_cast<int>(options[EPSILON].arg);
+	}
+	if(options[ZIGZAGS])
+	{
+		settings.minmaxParams.zigzags = lexical_cast<int>(options[ZIGZAGS].arg);
 	}
 
 	if(options[SEARCH_LIMIT])
 	{
 		settings.minerParams.limit = lexical_cast<double>(options[SEARCH_LIMIT].arg);
 		settings.ttminerParams.limit = lexical_cast<double>(options[SEARCH_LIMIT].arg);
+		settings.minmaxParams.limit = lexical_cast<double>(options[SEARCH_LIMIT].arg);
 	}
 
 	if(options[FILTER_P])
@@ -260,12 +286,13 @@ static Settings parseOptions(int argc, char** argv)
 
 	if(options[EXIT_AFTER])
 	{
-		int exitAfter = lexical_cast<int>(options[PATTERN_LENGTH].arg);
+		int exitAfter = lexical_cast<int>(options[EXIT_AFTER].arg);
 		if((exitAfter < 1) || (exitAfter > 100))
 		{
 			throw std::runtime_error("--exit-after should take values between 1 and 100");
 		}
 		settings.minerParams.exitAfter = exitAfter;
+		settings.minmaxParams.exitAfter = exitAfter;
 		settings.ttminerParams.exitAfter = exitAfter;
 	}
 
@@ -382,6 +409,103 @@ int main(int argc, char** argv)
 					"; p-value: " + std::to_string(r.p));
 			report->insert_text("min low: " + std::to_string(r.min_low) + "; max high: " + std::to_string(r.max_high));
 			report->insert_text("mean +: " + std::to_string(r.mean_pos) + "; mean -: " + std::to_string(r.mean_neg));
+			report->end_element();
+
+			patternsCount += r.count;
+		}
+		report->begin_element("Total patterns: " + std::to_string(patternsCount));
+		report->end_element();
+		report->end();
+	}
+	else if(s.minerType == minerZigzag)
+	{
+		LOG(DEBUG) << "Limit: " << s.minerParams.limit;
+		MinmaxMiner m(s.minmaxParams);
+		auto result = m.mine(q);
+
+		std::sort(result.begin(), result.end(), [] (const MinmaxMiner::Result& r1, const MinmaxMiner::Result& r2) {
+				return r1.count > r2.count;
+				});
+
+
+		ReportBuilder::Ptr report;
+		if(s.reportType == Html)
+			report = std::make_shared<HtmlReportBuilder>();
+		else if(s.reportType == Txt)
+			report = std::make_shared<TextReportBuilder>();
+		else
+			throw std::logic_error("Invalid report type: " + std::to_string(s.reportType));
+		report->start(s.outputFilename, TimePoint(0, 0), TimePoint(0, 0), tickers);
+		report->begin_element("Parameters:");
+		report->insert_text("Price tolerance: " + std::to_string(s.minmaxParams.priceTolerance));
+		report->insert_text("Volume tolerance: " + std::to_string(s.minmaxParams.volumeTolerance));
+		report->insert_text("Time tolerance: " + std::to_string(s.minmaxParams.timeTolerance));
+		report->insert_text("Zigzags: " + std::to_string(s.minmaxParams.zigzags));
+		report->insert_text("Epsilon: " + std::to_string(s.minmaxParams.epsilon));
+		report->insert_text("Exit after: " + std::to_string(s.minmaxParams.exitAfter) + " periods");
+		if(s.filterP > 0)
+			report->insert_text("Filter binomial p-value: < " + std::to_string(s.filterP));
+		if(s.filterMean > 0)
+			report->insert_text("Filter absolute mean value: <" + std::to_string(s.filterMean));
+		if(s.filterMeanP > 0)
+			report->insert_text("Filter absolute mean p-value: <" + std::to_string(s.filterMeanP));
+		if(s.filterCount > 0)
+			report->insert_text("Filter pattern occurences: >" + std::to_string(s.filterCount));
+		report->end_element();
+
+		int patternsCount = 0;
+		for(const auto& r : result)
+		{
+			if(s.filterP > 0)
+			{
+				if(r.p > s.filterP)
+					continue;
+			}
+
+			if(s.filterMean > 0)
+			{
+				if(fabs(r.mean) < s.filterMean)
+					continue;
+			}
+
+			if(s.filterMeanP > 0)
+			{
+				if(r.mean_p > s.filterMeanP)
+					continue;
+			}
+
+			if(s.filterCount > 0)
+			{
+				if(r.count < s.filterCount)
+					continue;
+			}
+
+			if(s.filterTrivial)
+			{
+				bool isTrivial = true;
+				for(const auto& e : r.elements)
+				{
+					if(e.price != 1)
+					{
+						isTrivial = false;
+						break;
+					}
+				}
+				if(isTrivial)
+					continue;
+			}
+
+			report->begin_element("Pattern: " + std::to_string(r.count) + " occurences");
+			for(const auto& el : r.elements)
+			{
+				report->insert_text("Z" + std::to_string(el.time) + ":" + std::to_string(el.price) + "/" + std::to_string(el.volume) + "(" + (el.minimum ? std::string("min") : std::string("max")) + ")");
+			}
+			report->insert_text("mean = " + std::to_string(r.mean) + "; rejecting H0 at p-value: " +
+				  std::to_string(r.mean_p) + "; sigma = " + std::to_string(r.sigma));
+			//report->insert_text("Minmax returns: " + std::to_string(r.min_return) + "/" + std::to_string(r.max_return) +
+					//"; median return: " + std::to_string(r.median));
+			report->insert_text("+ returns: " + std::to_string((double)r.pos_returns / r.count) +
+					"; p-value: " + std::to_string(r.p));
 			report->end_element();
 
 			patternsCount += r.count;

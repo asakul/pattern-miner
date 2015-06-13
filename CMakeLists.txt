@@ -42,6 +42,7 @@ set(sources
 
 	model/quotes.cpp
 	miners/ttminer.cpp
+	miners/minmaxminer.cpp
 	miner.cpp
 
 	report/textreportbuilder.cpp

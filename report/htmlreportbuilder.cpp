@@ -5,7 +5,7 @@
 
 using namespace boost::filesystem;
 
-static const int CandleHeight = 150;
+static const int CandleHeight = 145;
 
 HtmlReportBuilder::HtmlReportBuilder()
 {
@@ -68,21 +68,28 @@ void HtmlReportBuilder::insert_fit_elements(const std::vector<FitElement>& eleme
 		cairo_move_to(cr, center_x, CandleHeight - k * (e.high - min));
 		cairo_line_to(cr, center_x, CandleHeight - k * (e.low - min));
 		cairo_stroke(cr);
+		
+		double h = k * (e.close - e.open);
+		if(fabs(h) < 0.0001)
+			h = 2;
 		if(e.close > e.open)
 		{
 			cairo_set_source_rgb(cr, 0, 1, 0);
-			cairo_rectangle(cr, center_x - 20, CandleHeight - k * (e.close - min), 40, k * (e.close - e.open));
+			cairo_rectangle(cr, center_x - 20, CandleHeight - k * (e.close - min) + 5, 40, h);
 		}
 		else
 		{
 			cairo_set_source_rgb(cr, 1, 0, 0);
-			cairo_rectangle(cr, center_x - 20, CandleHeight - k * (e.open - min), 40, k * (e.open - e.close));
+			cairo_rectangle(cr, center_x - 20, CandleHeight - k * (e.open - min) + 5, 40, -h);
 		}
 		cairo_fill(cr);
 
 		cairo_set_source_rgb(cr, 0, 0, 0);
 		cairo_rectangle(cr, center_x - 5, 200 - kv * e.volume, 10, kv * e.volume);
 		cairo_fill(cr);
+
+		m_main << "<!-- C" << index << ": OHLCV:" << e.open << ":" <<
+			e.high << ":" << e.low << ":" << e.close << ":" << e.volume << " -->" << std::endl;
 
 		index++;
 	}

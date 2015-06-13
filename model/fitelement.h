@@ -11,5 +11,13 @@ struct FitElement
 	double volume;
 };
 
+struct ZigzagElement
+{
+	int time;
+	double price;
+	double volume;
+	bool minimum;
+};
+
 
 #endif /* end of include guard: FITELEMENT_H_HCUQKJR8 */

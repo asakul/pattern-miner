@@ -8,7 +8,7 @@ using namespace boost::math;
 
 static const int MaxPatternLength = 32;
 
-double alpha[] = { 0.00001, 0.0001, 0.001, 0.01, 0.05, 0.10, 0.25, 0.5, 1 };
+static const double alpha[] = { 0.00001, 0.0001, 0.001, 0.01, 0.05, 0.10, 0.25, 0.5, 1 };
 
 static void convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, FitElement* buffer)
 {
@@ -93,7 +93,7 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 			int current_percent = (double)pos / qbase->length() * 1000;
 			if(current_percent != last_percent)
 			{
-				LOG(DEBUG) << (double)current_percent / 10 << "% done";
+				LOG(DEBUG) << qbase->name() << ": " << (double)current_percent / 10 << "% done";
 				last_percent = current_percent;
 			}
 			size_t startPos = pos - m_params.patternLength;
