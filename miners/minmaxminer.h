@@ -22,6 +22,10 @@ public:
 		int pos_returns;
 		int neg_returns;
 		double p;
+
+		double min_return;
+		double max_return;
+		double median;
 	};
 
 	struct Params
@@ -51,7 +55,7 @@ public:
 	std::vector<Result> mine(std::list<Quotes::Ptr>& qlist);
 
 private:
-	bool matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags);
+	bool matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags, double tolerance);
 
 private:
 	Params m_params;

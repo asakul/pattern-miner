@@ -502,8 +502,8 @@ int main(int argc, char** argv)
 			}
 			report->insert_text("mean = " + std::to_string(r.mean) + "; rejecting H0 at p-value: " +
 				  std::to_string(r.mean_p) + "; sigma = " + std::to_string(r.sigma));
-			//report->insert_text("Minmax returns: " + std::to_string(r.min_return) + "/" + std::to_string(r.max_return) +
-					//"; median return: " + std::to_string(r.median));
+			report->insert_text("Minmax returns: " + std::to_string(r.min_return) + "/" + std::to_string(r.max_return) +
+					"; median return: " + std::to_string(r.median));
 			report->insert_text("+ returns: " + std::to_string((double)r.pos_returns / r.count) +
 					"; p-value: " + std::to_string(r.p));
 			report->end_element();

@@ -92,7 +92,7 @@ static std::vector<ZigzagElement> findZigzags(const Quotes::Ptr& q, size_t start
 	return result;
 }
 
-bool MinmaxMiner::matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags)
+bool MinmaxMiner::matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags, double tolerance)
 {
 	auto currentZigzags = findZigzags(q, pos, m_params.epsilon, zigzags.size());
 	if(currentZigzags.size() != zigzags.size())
@@ -100,7 +100,7 @@ bool MinmaxMiner::matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vect
 
 	for(size_t i = 0; i < currentZigzags.size(); i++)
 	{
-		if(fabs(currentZigzags[i].price - zigzags[i].price) > m_params.priceTolerance)
+		if(fabs(currentZigzags[i].price - zigzags[i].price) > tolerance)
 			return false;
 		if(fabs(currentZigzags[i].volume - zigzags[i].volume) > m_params.volumeTolerance)
 			return false;
@@ -159,8 +159,6 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 			int counter = 0;
 			double min_return = 1.0;
 			double max_return = -1.0;
-			double min_low = 1.0;
-			double max_high = -1.0;
 			double mean_pos = 0;
 			double mean_neg = 0;
 			int pos_returns = 0;
@@ -168,12 +166,21 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 			double sigma = 0;
 			std::vector<double> returns;
 
+			double abs_min = 10000000;
+			double abs_max = -10000000;
+			for(size_t i = 0; i < zigzags.size(); i++)
+			{
+				abs_min = std::min(abs_min, zigzags[i].price);
+				abs_max = std::max(abs_max, zigzags[i].price);
+			}
+			double tolerance = (abs_max - abs_min) * m_params.priceTolerance;
+
 			int scanIndex = 0;
 			for(const auto& qscan : qlist)
 			{
 				for(size_t scanPos = 0; scanPos < qscan->length(); scanPos++)
 				{
-					if(matchZigzags(qscan, scanPos, zigzags))
+					if(matchZigzags(qscan, scanPos, zigzags, tolerance))
 					{
 						size_t lastPos = scanPos + zigzags.back().time + m_params.epsilon;
 						size_t exitPos = lastPos + m_params.exitAfter;
@@ -182,6 +189,9 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 						double exitPrice = qscan->at(exitPos).close;
 
 						double ret = (exitPrice - lastPrice) / lastPrice;
+
+						min_return = std::min(min_return, ret);
+						max_return = std::max(max_return, ret);
 
 						if(exitPrice > lastPrice)
 						{
@@ -195,6 +205,7 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 						}
 						mean += ret;
 						sigma += ret * ret;
+						returns.push_back(ret);
 
 						counter++;
 						scanned[scanIndex + scanPos] = 1;
@@ -214,6 +225,8 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 				r.count = counter;
 				r.pos_returns = pos_returns;
 				r.neg_returns = neg_returns;
+				r.min_return = min_return;
+				r.max_return = max_return;
 
 				double binomial_sigma = sqrt(counter);
 				double q = fabs(pos_returns - (double)counter / 2) / binomial_sigma;
@@ -238,6 +251,15 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 						r.mean_p = a;
 						break;
 					}
+				}
+
+				if((counter % 2) == 0)
+				{
+					r.median = 0.5 * (returns[counter / 2 - 1] + returns[counter / 2]);
+				}
+				else
+				{
+					r.median = returns[counter / 2];
 				}
 
 				result.push_back(r);
