@@ -356,6 +356,19 @@ int main(int argc, char** argv)
 		else
 			throw std::logic_error("Invalid report type: " + std::to_string(s.reportType));
 		report->start(s.outputFilename, TimePoint(0, 0), TimePoint(0, 0), tickers);
+		report->begin_element("Parameters:");
+		report->insert_text("Price tolerance: " + std::to_string(s.minerParams.candleFit));
+		report->insert_text("Volume tolerance: " + std::to_string(s.minerParams.volumeFit));
+		report->insert_text("Exit after: " + std::to_string(s.minmaxParams.exitAfter) + " periods");
+		if(s.filterP > 0)
+			report->insert_text("Filter binomial p-value: < " + std::to_string(s.filterP));
+		if(s.filterMean > 0)
+			report->insert_text("Filter absolute mean value: <" + std::to_string(s.filterMean));
+		if(s.filterMeanP > 0)
+			report->insert_text("Filter absolute mean p-value: <" + std::to_string(s.filterMeanP));
+		if(s.filterCount > 0)
+			report->insert_text("Filter pattern occurences: >" + std::to_string(s.filterCount));
+		report->end_element();
 
 		int patternsCount = 0;
 		for(const auto& r : result)
