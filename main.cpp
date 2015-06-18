@@ -85,6 +85,7 @@ enum MinerType { minerCandle, minerTime, minerZigzag };
 enum  optionIndex { UNKNOWN, HELP, INPUT_FILENAME, CANDLE_TOLERANCE, VOLUME_TOLERANCE,
 	TIME_TOLERANCE,
 	PATTERN_LENGTH,
+	MOMENTUM,
 	DEBUG_MODE, SEARCH_LIMIT,
 	FILTER_P, FILTER_MEAN, FILTER_COUNT, FILTER_MEAN_P, FILTER_TRIVIAL,
 	EPSILON,
@@ -101,6 +102,8 @@ const option::Descriptor usage[] = {
 { INPUT_FILENAME ,0,"i","input-filename",Arg::Required,"  -i <filename>, \t--input-filename=<filename>  \tPath to quotes in finam format" },
 { PATTERN_LENGTH ,0,"p","pattern-length",Arg::PatternLength,"  -p <arg>, \t--pattern-length=<arg>"
                                           "  \tSpecifies pattern length." },
+{ MOMENTUM ,0,"m","momentum-order",Arg::Numeric,"  -m <arg>, \t--momentum-order=<arg>"
+                                          "  \tSpecifies momentum order." },
 { CANDLE_TOLERANCE, 0,"c","candle-tolerance", Arg::Double, "  -c <num>, \t--candle-tolerance=<num>  \tHow precise candle features should be matched." },
 { VOLUME_TOLERANCE, 0,"o","volume-tolerance", Arg::Double, "  -o <num>, \t--volume-tolerance=<num>  \tHow precise volumes should be matched." },
 { TIME_TOLERANCE, 0,"t","time-tolerance", Arg::Numeric, "  -t <num>, \t--time-tolerance=<num>  \tHow precise time should be matched." },
@@ -224,6 +227,11 @@ static Settings parseOptions(int argc, char** argv)
 	else
 	{
 		settings.minerParams.patternLength = lexical_cast<int>(options[PATTERN_LENGTH].arg);
+	}
+
+	if(options[MOMENTUM])
+	{
+		settings.minerParams.momentumOrder = lexical_cast<double>(options[MOMENTUM].arg);
 	}
 
 	if(!options[CANDLE_TOLERANCE])
@@ -359,7 +367,8 @@ int main(int argc, char** argv)
 		report->begin_element("Parameters:");
 		report->insert_text("Price tolerance: " + std::to_string(s.minerParams.candleFit));
 		report->insert_text("Volume tolerance: " + std::to_string(s.minerParams.volumeFit));
-		report->insert_text("Exit after: " + std::to_string(s.minmaxParams.exitAfter) + " periods");
+		report->insert_text("Exit after: " + std::to_string(s.minerParams.exitAfter) + " periods");
+		report->insert_text("Momentum order: " + std::to_string(s.minerParams.momentumOrder) + " periods");
 		if(s.filterP > 0)
 			report->insert_text("Filter binomial p-value: < " + std::to_string(s.filterP));
 		if(s.filterMean > 0)
@@ -422,6 +431,7 @@ int main(int argc, char** argv)
 					"; p-value: " + std::to_string(r.p));
 			report->insert_text("min low: " + std::to_string(r.min_low) + "; max high: " + std::to_string(r.max_high));
 			report->insert_text("mean +: " + std::to_string(r.mean_pos) + "; mean -: " + std::to_string(r.mean_neg));
+			report->insert_text("Momentum sign: " + std::to_string(r.momentumSign));
 			report->end_element();
 
 			patternsCount += r.count;

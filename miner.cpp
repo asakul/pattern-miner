@@ -10,45 +10,70 @@ static const int MaxPatternLength = 32;
 
 static const double alpha[] = { 0.00001, 0.0001, 0.001, 0.01, 0.05, 0.10, 0.25, 0.5, 1 };
 
-static void convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, FitElement* buffer)
+struct Pattern
+{
+	int momentumSign;
+	std::vector<FitElement> elements;
+};
+
+static Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, int momentumOrder)
 {
 	auto startPrice = q[startPos].open;
 	double startVolume = q[startPos].volume;
+	Pattern pattern;
 	for(int i = 0; i < patternLength; i++)
 	{
-		buffer[i].open = q[startPos + i].open / startPrice;
-		buffer[i].high = q[startPos + i].high / startPrice;
-		buffer[i].low = q[startPos + i].low / startPrice;
-		buffer[i].close = q[startPos + i].close / startPrice;
-		buffer[i].volume = (double)q[startPos + i].volume / startVolume;
+		FitElement el;
+		el.open = q[startPos + i].open / startPrice;
+		el.high = q[startPos + i].high / startPrice;
+		el.low = q[startPos + i].low / startPrice;
+		el.close = q[startPos + i].close / startPrice;
+		el.volume = (double)q[startPos + i].volume / startVolume;
+		pattern.elements.push_back(el);
 	}
+
+	if(momentumOrder > 0)
+	{
+		if((int)startPos - momentumOrder < 0)
+			pattern.momentumSign = 0;
+		else
+			pattern.momentumSign = q[startPos - momentumOrder].close - q[startPos].open > 0 ? 1 : -1;
+	}
+	else
+	{
+		pattern.momentumSign = 0;
+	}
+	return pattern;
 }
 
-static bool fit(FitElement* f1, FitElement* f2, double candleTolerance, double volumeTolerance, int length)
+static bool fit(const Pattern& f1, const Pattern& f2, double candleTolerance, double volumeTolerance, int length)
 {
+	if(f1.momentumSign != f2.momentumSign)
+		return false;
+
 	double abs_min = 10000000;
 	double abs_max = -10000000;
 	for(int i = 0; i < length; i++)
 	{
-		abs_min = std::min(abs_min, std::min(f1[i].low, f2[i].low));
-		abs_max = std::max(abs_max, std::max(f1[i].high, f2[i].high));
+		abs_min = std::min(abs_min, std::min(f1.elements[i].low, f2.elements[i].low));
+		abs_max = std::max(abs_max, std::max(f1.elements[i].high, f2.elements[i].high));
 	}
 	double tolerance = (abs_max - abs_min) * candleTolerance;
 	for(int i = 0; i < length; i++)
 	{
-		if(fabs(f1[i].open - f2[i].open) > tolerance)
+		if(fabs(f1.elements[i].open - f2.elements[i].open) > tolerance)
 			return false;
-		if(fabs(f1[i].close - f2[i].close) > tolerance)
+		if(fabs(f1.elements[i].close - f2.elements[i].close) > tolerance)
 			return false;
-		if(fabs(f1[i].high - f2[i].high) > tolerance)
+		if(fabs(f1.elements[i].high - f2.elements[i].high) > tolerance)
 			return false;
-		if(fabs(f1[i].low - f2[i].low) > tolerance)
+		if(fabs(f1.elements[i].low - f2.elements[i].low) > tolerance)
 			return false;
-		if((f1[i].open - f1[i].close) * (f2[i].open - f2[i].close) < 0)
+		if((f1.elements[i].open - f1.elements[i].close) * (f2.elements[i].open - f2.elements[i].close) < 0)
 			return false;
 		if(volumeTolerance > 0)
 		{
-			if(fabs(f1[i].volume - f2[i].volume) > volumeTolerance)
+			if(fabs(f1.elements[i].volume - f2.elements[i].volume) > volumeTolerance)
 				return false;
 		}
 	}
@@ -67,8 +92,6 @@ Miner::~Miner()
 std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 {
 	std::vector<Result> result;
-	FitElement fitBuffer[MaxPatternLength];
-	FitElement scanBuffer[MaxPatternLength];
 	int total_positions = 0;
 	for(const auto& q : qlist)
 	{
@@ -97,7 +120,7 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 				last_percent = current_percent;
 			}
 			size_t startPos = pos - m_params.patternLength;
-			convertToRelativeUnits(*qbase, startPos, m_params.patternLength, fitBuffer);
+			Pattern basePattern = convertToRelativeUnits(*qbase, startPos, m_params.patternLength, m_params.momentumOrder);
 
 			double mean = 0;
 			int counter = 0;
@@ -116,8 +139,8 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 			{
 				for(size_t scanPos = m_params.patternLength; scanPos < qscan->length() - m_params.patternLength - m_params.exitAfter; scanPos++)
 				{
-					convertToRelativeUnits(*qscan, scanPos, m_params.patternLength, scanBuffer);
-					if(fit(fitBuffer, scanBuffer, m_params.candleFit, m_params.volumeFit, m_params.patternLength))
+					Pattern thisPattern = convertToRelativeUnits(*qscan, scanPos, m_params.patternLength, m_params.momentumOrder);
+					if(fit(basePattern, thisPattern, m_params.candleFit, m_params.volumeFit, m_params.patternLength))
 					{
 						size_t nextPos = scanPos + m_params.patternLength;
 						size_t exitPos = scanPos + m_params.patternLength + m_params.exitAfter - 1;
@@ -182,10 +205,8 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 				double p = (1 - erf(q));
 
 				Result r;
-				for(int i = 0; i < m_params.patternLength; i++)
-				{
-					r.elements.push_back(fitBuffer[i]);
-				}
+				r.momentumSign = basePattern.momentumSign;
+				r.elements = basePattern.elements;
 
 				students_t dist(counter - 1);
 
