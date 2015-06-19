@@ -36,7 +36,7 @@ public:
 			zigzags(2),
 			epsilon(6),
 			priceTolerance(0.1),
-			volumeTolerance(0.2)
+			volumeTolerance(-1)
 		{
 		}
 
