@@ -6,6 +6,10 @@
 #include <time.h>
 #include "log.h"
 
+#ifdef WIN32
+#define timegm _mkgmtime
+#endif
+
 using namespace boost::algorithm;
 using namespace boost;
 

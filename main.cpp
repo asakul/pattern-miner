@@ -7,7 +7,7 @@
 #include "optionparser/optionparser.h"
 #include <boost/lexical_cast.hpp>
 #include "report/textreportbuilder.h"
-#include "report/htmlreportbuilder.h"
+//#include "report/htmlreportbuilder.h"
 
 using namespace boost;
 
@@ -125,7 +125,7 @@ const option::Descriptor usage[] = {
 
 enum ReportType
 {
-	Unknown,
+	ReportTypeUnknown,
 	Html,
 	Txt
 };
@@ -350,7 +350,10 @@ int main(int argc, char** argv)
 
 		ReportBuilder::Ptr report;
 		if(s.reportType == Html)
-			report = std::make_shared<HtmlReportBuilder>();
+		{
+			throw std::runtime_error("Not supported yet");
+			//report = std::make_shared<HtmlReportBuilder>();
+		}
 		else if(s.reportType == Txt)
 			report = std::make_shared<TextReportBuilder>();
 		else
@@ -430,7 +433,10 @@ int main(int argc, char** argv)
 
 		ReportBuilder::Ptr report;
 		if(s.reportType == Html)
-			report = std::make_shared<HtmlReportBuilder>();
+		{
+			throw std::runtime_error("Not supported yet");
+			//report = std::make_shared<HtmlReportBuilder>();
+		}
 		else if(s.reportType == Txt)
 			report = std::make_shared<TextReportBuilder>();
 		else
