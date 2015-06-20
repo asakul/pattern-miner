@@ -435,6 +435,7 @@ int main(int argc, char** argv)
 			report->insert_text("min low: " + std::to_string(r.min_low) + "; max high: " + std::to_string(r.max_high));
 			report->insert_text("mean +: " + std::to_string(r.mean_pos) + "; mean -: " + std::to_string(r.mean_neg));
 			report->insert_text("Momentum sign: " + std::to_string(r.momentumSign));
+			report->insert_text("Signature: " + r.signature);
 			report->end_element();
 
 			patternsCount += r.count;

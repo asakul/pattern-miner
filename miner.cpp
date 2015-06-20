@@ -14,6 +14,18 @@ struct Pattern
 {
 	int momentumSign;
 	std::vector<FitElement> elements;
+	std::string signature;
+};
+
+struct SignatureElement
+{
+
+	SignatureElement(double p, char type, int index) : price(p), sign(type + std::to_string(index))
+	{
+	}
+
+	double price;
+	std::string sign;
 };
 
 static Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, int momentumOrder)
@@ -21,6 +33,7 @@ static Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLen
 	auto startPrice = q[startPos].open;
 	double startVolume = q[startPos].volume;
 	Pattern pattern;
+	std::vector<double> signatureArray;
 	for(int i = 0; i < patternLength; i++)
 	{
 		FitElement el;
@@ -71,6 +84,8 @@ static bool fit(const Pattern& f1, const Pattern& f2, double candleTolerance, do
 			return false;
 		if((f1.elements[i].open - f1.elements[i].close) * (f2.elements[i].open - f2.elements[i].close) < 0)
 			return false;
+		if(f1.signature != f2.signature)
+			return false;
 		if(volumeTolerance > 0)
 		{
 			if(fabs(f1.elements[i].volume - f2.elements[i].volume) > volumeTolerance)
@@ -78,6 +93,54 @@ static bool fit(const Pattern& f1, const Pattern& f2, double candleTolerance, do
 		}
 	}
 	return true;
+}
+
+static std::string calculateSignature(const Quotes::Ptr& q, size_t pos, int patternLength)
+{
+	std::string signature;
+
+	std::vector<SignatureElement> els;
+	els.reserve(4 * patternLength);
+	for(int i = 0; i < patternLength; i++)
+	{
+		els.emplace_back(q->at(pos + i).open, 'O', i);
+		els.emplace_back(q->at(pos + i).high, 'H', i);
+		els.emplace_back(q->at(pos + i).low, 'L', i);
+		els.emplace_back(q->at(pos + i).close, 'C', i);
+	}
+
+	std::sort(els.begin(), els.end(), [](const SignatureElement& e1, const SignatureElement& e2)
+			{
+				if(e1.price != e2.price)
+					return e1.price < e2.price;
+				else
+					return e1.sign < e2.sign;
+			});
+
+
+	for(const auto& se : els)
+	{
+		signature += se.sign;
+	}
+
+	return signature;
+}
+
+static std::vector<std::string> calculateSignatures(std::list<Quotes::Ptr>& qlist, int patternLength)
+{
+	std::vector<std::string> result;
+
+	size_t baseIndex = 0;
+	for(const auto& q : qlist)
+	{
+		for(size_t index = 0; index < q->length() - patternLength; index++)
+		{
+			result.push_back(calculateSignature(q, index, patternLength));
+		}
+		baseIndex++;
+	}
+
+	return result;
 }
 
 Miner::Miner(const Params& p) : m_params(p)
@@ -91,6 +154,7 @@ Miner::~Miner()
 
 std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 {
+	std::vector<std::string> signatures = calculateSignatures(qlist, m_params.patternLength);
 	std::vector<Result> result;
 	int total_positions = 0;
 	for(const auto& q : qlist)
@@ -102,7 +166,7 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 	for(const auto& qbase : qlist)
 	{
 		int last_percent = 0;
-		for(size_t pos = m_params.patternLength; pos < qbase->length() - 1; pos++)
+		for(size_t pos = 0; pos < qbase->length() - m_params.patternLength - m_params.exitAfter; pos++)
 		{
 			if(m_params.limit > 0)
 			{
@@ -113,14 +177,15 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 			if(scanned[baseIndex + pos])
 				continue;
 
-			int current_percent = (double)pos / qbase->length() * 1000;
+			int current_percent = (double)pos / qbase->length() * 10000;
 			if(current_percent != last_percent)
 			{
-				LOG(DEBUG) << qbase->name() << ": " << (double)current_percent / 10 << "% done";
+				LOG(DEBUG) << qbase->name() << ": " << (double)current_percent / 100 << "% done";
 				last_percent = current_percent;
 			}
-			size_t startPos = pos - m_params.patternLength;
+			size_t startPos = pos;
 			Pattern basePattern = convertToRelativeUnits(*qbase, startPos, m_params.patternLength, m_params.momentumOrder);
+			basePattern.signature = signatures[baseIndex + pos];
 
 			double mean = 0;
 			int counter = 0;
@@ -137,9 +202,10 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 			int scanIndex = 0;
 			for(const auto& qscan : qlist)
 			{
-				for(size_t scanPos = m_params.patternLength; scanPos < qscan->length() - m_params.patternLength - m_params.exitAfter; scanPos++)
+				for(size_t scanPos = 0; scanPos < qscan->length() - m_params.patternLength - m_params.exitAfter; scanPos++)
 				{
 					Pattern thisPattern = convertToRelativeUnits(*qscan, scanPos, m_params.patternLength, m_params.momentumOrder);
+					thisPattern.signature = signatures[scanIndex + scanPos];
 					if(fit(basePattern, thisPattern, m_params.candleFit, m_params.volumeFit, m_params.patternLength))
 					{
 						size_t nextPos = scanPos + m_params.patternLength;
@@ -205,6 +271,7 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 				double p = (1 - erf(q));
 
 				Result r;
+				r.signature = basePattern.signature;
 				r.momentumSign = basePattern.momentumSign;
 				r.elements = basePattern.elements;
 

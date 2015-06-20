@@ -12,6 +12,7 @@ public:
 	{
 		int momentumSign;
 		std::vector<FitElement> elements;
+		std::string signature;
 		double mean;
 		double sigma;
 		double mean_p;
