@@ -35,10 +35,13 @@ include_directories(3rdparty)
 include_directories("/usr/include/cairo")
 include_directories("/usr/include/freetype2")
 
+include_directories("3rdparty/jsoncpp")
+
 set(sources
 	log.cpp
 
 	3rdparty/lodepng/lodepng.cpp
+	3rdparty/jsoncpp/jsoncpp.cpp
 
 	model/quotes.cpp
 	miners/ttminer.cpp
