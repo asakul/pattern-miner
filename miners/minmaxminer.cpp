@@ -102,8 +102,11 @@ bool MinmaxMiner::matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vect
 	{
 		if(fabs(currentZigzags[i].price - zigzags[i].price) > tolerance)
 			return false;
-		if(fabs(currentZigzags[i].volume - zigzags[i].volume) > m_params.volumeTolerance)
-			return false;
+		if(m_params.volumeTolerance > 0)
+		{
+			if(fabs(currentZigzags[i].volume - zigzags[i].volume) > m_params.volumeTolerance)
+				return false;
+		}
 		if(abs(currentZigzags[i].time - zigzags[i].time) > m_params.timeTolerance)
 			return false;
 		if(currentZigzags[i].minimum != zigzags[i].minimum)

@@ -12,12 +12,12 @@ if(PKG_CONFIG_FOUND)
 	message("-- pkgconfig found")
 endif(PKG_CONFIG_FOUND)
 
-set(CMAKE_CXX_FLAGS  "-O2 -Wall -g --std=gnu++11 -fPIC -fdiagnostics-color=always")
+set(CMAKE_CXX_FLAGS  "-O2 -Wall -g --std=gnu++14 -fPIC -fdiagnostics-color=always")
 set(LINK_FLAGS "-O2 -g")
 
 if(UNIX)
 	add_definitions(-DUNIX)
-elseif(WIN32 && !CYGWIN)
+elseif(WIN32)
 	add_definitions(-DWIN32)
 endif(UNIX)
 
@@ -32,8 +32,8 @@ find_package(Boost COMPONENTS system filesystem REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(3rdparty)
 
-include_directories("/usr/include/cairo")
-include_directories("/usr/include/freetype2")
+#include_directories("/usr/include/cairo")
+#include_directories("/usr/include/freetype2")
 
 include_directories("3rdparty/jsoncpp")
 
@@ -49,10 +49,13 @@ set(sources
 	miner.cpp
 
 	report/textreportbuilder.cpp
-	report/htmlreportbuilder.cpp
+#	report/htmlreportbuilder.cpp
 	)
 	
 add_executable(pattern-mining main.cpp ${sources})
-target_link_libraries(pattern-mining  ${Boost_LIBRARIES} -lpthread -ldl)
-target_link_libraries(pattern-mining -lcairo -lfreetype)
+target_link_libraries(pattern-mining  ${Boost_LIBRARIES})
+if(UNIX)
+target_link_libraries(pattern-mining -lpthread -ldl)
+endif(UNIX)
+#target_link_libraries(pattern-mining -lcairo -lfreetype)
 

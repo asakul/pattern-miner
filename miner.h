@@ -10,7 +10,9 @@ class Miner
 public:
 	struct Result
 	{
+		int momentumSign;
 		std::vector<FitElement> elements;
+		std::string signature;
 		double mean;
 		double sigma;
 		double mean_p;
@@ -33,7 +35,8 @@ public:
 		Params() : candleFit(0.1), volumeFit(0),
 			patternLength(2),
 			limit(-1),
-			exitAfter(1)
+			exitAfter(1),
+			momentumOrder(-1)
 		{
 		}
 		double candleFit;
@@ -41,6 +44,7 @@ public:
 		int patternLength;
 		double limit;
 		int exitAfter;
+		int momentumOrder;
 	};
 
 	Miner(const Params& p);
