@@ -26,6 +26,7 @@ public:
 		double min_return;
 		double max_return;
 		double median;
+		int momentumSign;
 	};
 
 	struct Params
@@ -36,7 +37,8 @@ public:
 			zigzags(2),
 			epsilon(6),
 			priceTolerance(0.1),
-			volumeTolerance(-1)
+			volumeTolerance(-1),
+			momentumOrder(0)
 		{
 		}
 
@@ -47,6 +49,7 @@ public:
 		int epsilon;
 		double priceTolerance;
 		double volumeTolerance;
+		int momentumOrder;
 	};
 
 	MinmaxMiner(const Params& param);
@@ -55,7 +58,7 @@ public:
 	std::vector<Result> mine(std::list<Quotes::Ptr>& qlist);
 
 private:
-	bool matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags, double tolerance);
+	bool matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags, double tolerance, int momentumSign);
 
 private:
 	Params m_params;

@@ -92,10 +92,22 @@ static std::vector<ZigzagElement> findZigzags(const Quotes::Ptr& q, size_t start
 	return result;
 }
 
-bool MinmaxMiner::matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags, double tolerance)
+bool MinmaxMiner::matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags, double tolerance, int momentumSign)
 {
 	auto currentZigzags = findZigzags(q, pos, m_params.epsilon, zigzags.size());
 	if(currentZigzags.size() != zigzags.size())
+		return false;
+
+	int thisMomentumSign = 0;
+	if(m_params.momentumOrder > 0)
+	{
+		if((int)pos - m_params.momentumOrder < 0)
+			thisMomentumSign = 0;
+		else
+			thisMomentumSign = q->at(pos - m_params.momentumOrder).close - q->at(pos).open > 0 ? 1 : -1;
+	}
+
+	if(thisMomentumSign != momentumSign)
 		return false;
 
 	for(size_t i = 0; i < currentZigzags.size(); i++)
@@ -158,6 +170,15 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 			if(zigzags.size() < (size_t)m_params.zigzags)
 				continue;
 
+			int baseMomentumSign = 0;
+			if(m_params.momentumOrder > 0)
+			{
+				if((int)pos - m_params.momentumOrder < 0)
+					baseMomentumSign = 0;
+				else
+					baseMomentumSign = qbase->at(pos - m_params.momentumOrder).close - qbase->at(pos).open > 0 ? 1 : -1;
+			}
+
 			double mean = 0;
 			int counter = 0;
 			double min_return = 1.0;
@@ -183,7 +204,7 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 			{
 				for(size_t scanPos = 0; scanPos < qscan->length(); scanPos++)
 				{
-					if(matchZigzags(qscan, scanPos, zigzags, tolerance))
+					if(matchZigzags(qscan, scanPos, zigzags, tolerance, baseMomentumSign))
 					{
 						size_t lastPos = scanPos + zigzags.back().time + m_params.epsilon;
 						size_t exitPos = lastPos + m_params.exitAfter;
@@ -222,6 +243,7 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 				mean = mean / counter;
 				sigma = sigma / counter;
 				Result r;
+				r.momentumSign = baseMomentumSign;
 				r.elements = zigzags;
 				r.mean = mean;
 				r.sigma = sqrt(sigma - mean * mean);

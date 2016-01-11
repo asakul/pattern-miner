@@ -231,7 +231,8 @@ static Settings parseOptions(int argc, char** argv)
 
 	if(options[MOMENTUM])
 	{
-		settings.minerParams.momentumOrder = lexical_cast<double>(options[MOMENTUM].arg);
+		settings.minmaxParams.momentumOrder =
+			settings.minerParams.momentumOrder = lexical_cast<double>(options[MOMENTUM].arg);
 	}
 
 	if(!options[CANDLE_TOLERANCE])
@@ -536,6 +537,7 @@ int main(int argc, char** argv)
 					"; median return: " + std::to_string(r.median));
 			report->insert_text("+ returns: " + std::to_string((double)r.pos_returns / r.count) +
 					"; p-value: " + std::to_string(r.p));
+			report->insert_text("Momentum sign: " + std::to_string(r.momentumSign));
 			report->end_element();
 
 			patternsCount += r.count;
