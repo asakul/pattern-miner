@@ -6,8 +6,9 @@
 #include <list>
 #include "model/quotes.h"
 #include "model/fitelement.h"
+#include "miners/iminer.h"
 
-class MinmaxMiner
+class MinmaxMiner : public IMiner
 {
 public:
 	struct Result
@@ -52,16 +53,28 @@ public:
 		int momentumOrder;
 	};
 
+	MinmaxMiner();
 	MinmaxMiner(const Params& param);
 	virtual ~MinmaxMiner();
 
-	std::vector<Result> mine(std::list<Quotes::Ptr>& qlist);
+	virtual void parseConfig(const Json::Value& root);
+
+	virtual void setQuotes(const std::vector<Quotes::Ptr>& quotes);
+
+	virtual void mine();
+
+	virtual void makeReport(const ReportBuilder::Ptr& builder,
+			const std::string& filename);
 
 private:
+	std::vector<Result> doMine(std::vector<Quotes::Ptr>& qlist);
 	bool matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vector<ZigzagElement>& zigzags, double tolerance, int momentumSign);
 
 private:
 	Params m_params;
+	std::vector<Quotes::Ptr> m_quotes;
+	std::vector<Result> m_results;
+	Json::Value m_reportConfig;
 };
 
 #endif /* end of include guard: MINMAXMINER_H_MGBU7XUN */

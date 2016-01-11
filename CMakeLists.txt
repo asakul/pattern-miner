@@ -46,10 +46,11 @@ set(sources
 	model/quotes.cpp
 	miners/ttminer.cpp
 	miners/minmaxminer.cpp
+	miners/iminer.cpp
 	miner.cpp
 
 	report/textreportbuilder.cpp
-#	report/htmlreportbuilder.cpp
+	report/htmlreportbuilder.cpp
 	)
 	
 add_executable(pattern-mining main.cpp ${sources})
@@ -57,5 +58,5 @@ target_link_libraries(pattern-mining  ${Boost_LIBRARIES})
 if(UNIX)
 target_link_libraries(pattern-mining -lpthread -ldl)
 endif(UNIX)
-#target_link_libraries(pattern-mining -lcairo -lfreetype)
+target_link_libraries(pattern-mining -lcairo -lfreetype)
 

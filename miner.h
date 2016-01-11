@@ -4,8 +4,9 @@
 #include "model/quotes.h"
 #include "model/fitelement.h"
 #include <list>
+#include "miners/iminer.h"
 
-class Miner
+class Miner : public IMiner
 {
 public:
 	struct Result
@@ -36,7 +37,8 @@ public:
 			patternLength(2),
 			limit(-1),
 			exitAfter(1),
-			momentumOrder(-1)
+			momentumOrder(-1),
+			fitSignatures(false)
 		{
 		}
 		double candleFit;
@@ -45,15 +47,38 @@ public:
 		double limit;
 		int exitAfter;
 		int momentumOrder;
+		bool fitSignatures;
 	};
 
+	Miner();
 	Miner(const Params& p);
 	virtual ~Miner();
 
-	std::vector<Result> mine(std::list<Quotes::Ptr>& qlist);
+	virtual void parseConfig(const Json::Value& root);
+
+	virtual void setQuotes(const std::vector<Quotes::Ptr>& quotes);
+
+	virtual void mine();
+
+	virtual void makeReport(const ReportBuilder::Ptr& builder,
+			const std::string& filename);
+
+	struct Pattern
+	{
+		int momentumSign;
+		std::vector<FitElement> elements;
+		std::string signature;
+	};
+
+private:
+	std::vector<Result> doMine(std::vector<Quotes::Ptr>& qlist);
+	bool fit(const Pattern& f1, const Pattern& f2, int length);
 
 private:
 	Params m_params;
+	std::vector<Quotes::Ptr> m_quotes;
+	std::vector<Result> m_results;
+	Json::Value m_reportConfig;
 };
 
 #endif

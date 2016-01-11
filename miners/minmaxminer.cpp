@@ -127,6 +127,11 @@ bool MinmaxMiner::matchZigzags(const Quotes::Ptr& q, size_t pos, const std::vect
 	return true;
 }
 
+MinmaxMiner::MinmaxMiner()
+{
+
+}
+
 MinmaxMiner::MinmaxMiner(const Params& params) : m_params(params)
 {
 }
@@ -135,7 +140,7 @@ MinmaxMiner::~MinmaxMiner()
 {
 }
 
-std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist)
+std::vector<MinmaxMiner::Result> MinmaxMiner::doMine(std::vector<Quotes::Ptr>& qlist)
 {
 	std::vector<MinmaxMiner::Result> result;
 
@@ -294,5 +299,127 @@ std::vector<MinmaxMiner::Result> MinmaxMiner::mine(std::list<Quotes::Ptr>& qlist
 	}
 
 	return result;
+}
+
+
+void MinmaxMiner::parseConfig(const Json::Value& root)
+{
+	auto minerRoot = root["miner"];
+	m_params.limit = root.get("sample-percentage", -1).asDouble();
+	m_params.exitAfter = root.get("exit-after", 2).asUInt();
+	m_params.momentumOrder = root.get("momentum-order", -1).asInt();
+	m_params.zigzags = root.get("zigzags", 2).asInt();
+	m_params.epsilon = root.get("epsilon", 6).asInt();
+	m_params.priceTolerance = root.get("price-tolerance", 0.1).asDouble();
+	m_params.volumeTolerance = root.get("volume-tolerance", -1).asDouble();
+	m_params.momentumOrder = root.get("momentum-order", 0).asInt();
+
+	auto reportConfig = root["report"];
+	m_reportConfig.swap(reportConfig);
+}
+
+void MinmaxMiner::setQuotes(const std::vector<Quotes::Ptr>& quotes)
+{
+	m_quotes = quotes;
+}
+
+void MinmaxMiner::mine()
+{
+	m_results = doMine(m_quotes);
+}
+
+void MinmaxMiner::makeReport(const ReportBuilder::Ptr& builder,
+		const std::string& filename)
+{
+	std::sort(m_results.begin(), m_results.end(), [] (const MinmaxMiner::Result& r1, const MinmaxMiner::Result& r2) {
+			return r1.count > r2.count;
+			});
+
+	auto outputFilename = m_reportConfig.get("output-filename", filename).asString();
+	double filterP = m_reportConfig.get("filter-p", 0).asDouble();
+	double filterMean = m_reportConfig.get("filter-mean", 0).asDouble();
+	double filterMeanP = m_reportConfig.get("filter-mean-p", 0).asDouble();
+	int filterCount = m_reportConfig.get("filter-count", 0).asInt();
+	bool filterTrivial = m_reportConfig.get("filter-trivial", false).asBool();
+
+	builder->start(outputFilename, TimePoint(0, 0), TimePoint(0, 0), std::list<std::string>());
+	builder->begin_element("Parameters:");
+	builder->insert_text("Price tolerance: " + std::to_string(m_params.priceTolerance));
+	builder->insert_text("Volume tolerance: " + std::to_string(m_params.volumeTolerance));
+	builder->insert_text("Time tolerance: " + std::to_string(m_params.timeTolerance));
+	builder->insert_text("Zigzags: " + std::to_string(m_params.zigzags));
+	builder->insert_text("Epsilon: " + std::to_string(m_params.epsilon));
+	builder->insert_text("Exit after: " + std::to_string(m_params.exitAfter) + " periods");
+	if(filterP > 0)
+		builder->insert_text("Filter binomial p-value: < " + std::to_string(filterP));
+	if(filterMean > 0)
+		builder->insert_text("Filter absolute mean value: <" + std::to_string(filterMean));
+	if(filterMeanP > 0)
+		builder->insert_text("Filter absolute mean p-value: <" + std::to_string(filterMeanP));
+	if(filterCount > 0)
+		builder->insert_text("Filter pattern occurences: >" + std::to_string(filterCount));
+	builder->end_element();
+
+	int patternsCount = 0;
+	for(const auto& r : m_results)
+	{
+		if(filterP > 0)
+		{
+			if(r.p > filterP)
+				continue;
+		}
+
+		if(filterMean > 0)
+		{
+			if(fabs(r.mean) < filterMean)
+				continue;
+		}
+
+		if(filterMeanP > 0)
+		{
+			if(r.mean_p > filterMeanP)
+				continue;
+		}
+
+		if(filterCount > 0)
+		{
+			if(r.count < filterCount)
+				continue;
+		}
+
+		if(filterTrivial)
+		{
+			bool isTrivial = true;
+			for(const auto& e : r.elements)
+			{
+				if(e.price != 1)
+				{
+					isTrivial = false;
+					break;
+				}
+			}
+			if(isTrivial)
+				continue;
+		}
+
+		builder->begin_element("Pattern: " + std::to_string(r.count) + " occurences");
+		for(const auto& el : r.elements)
+		{
+			builder->insert_text("Z" + std::to_string(el.time) + ":" + std::to_string(el.price) + "/" + std::to_string(el.volume) + "(" + (el.minimum ? std::string("min") : std::string("max")) + ")");
+		}
+		builder->insert_text("mean = " + std::to_string(r.mean) + "; rejecting H0 at p-value: " +
+			  std::to_string(r.mean_p) + "; sigma = " + std::to_string(r.sigma));
+		builder->insert_text("Minmax returns: " + std::to_string(r.min_return) + "/" + std::to_string(r.max_return) +
+				"; median return: " + std::to_string(r.median));
+		builder->insert_text("+ returns: " + std::to_string((double)r.pos_returns / r.count) +
+				"; p-value: " + std::to_string(r.p));
+		builder->insert_text("Momentum sign: " + std::to_string(r.momentumSign));
+		builder->end_element();
+
+		patternsCount += r.count;
+	}
+	builder->begin_element("Total patterns: " + std::to_string(patternsCount));
+	builder->end_element();
+	builder->end();
 }
 

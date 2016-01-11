@@ -7,7 +7,7 @@ using namespace boost::filesystem;
 
 static const int CandleHeight = 145;
 
-HtmlReportBuilder::HtmlReportBuilder()
+HtmlReportBuilder::HtmlReportBuilder() : m_imageCounter(0)
 {
 }
 

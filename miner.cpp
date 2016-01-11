@@ -10,13 +10,6 @@ static const int MaxPatternLength = 32;
 
 static const double alpha[] = { 0.00001, 0.0001, 0.001, 0.01, 0.05, 0.10, 0.25, 0.5, 1 };
 
-struct Pattern
-{
-	int momentumSign;
-	std::vector<FitElement> elements;
-	std::string signature;
-};
-
 struct SignatureElement
 {
 
@@ -28,11 +21,11 @@ struct SignatureElement
 	std::string sign;
 };
 
-static Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, int momentumOrder)
+static Miner::Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, int momentumOrder)
 {
 	auto startPrice = q[startPos].open;
 	double startVolume = q[startPos].volume;
-	Pattern pattern;
+	Miner::Pattern pattern;
 	std::vector<double> signatureArray;
 	for(int i = 0; i < patternLength; i++)
 	{
@@ -59,7 +52,7 @@ static Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLen
 	return pattern;
 }
 
-static bool fit(const Pattern& f1, const Pattern& f2, double candleTolerance, double volumeTolerance, int length)
+bool Miner::fit(const Pattern& f1, const Pattern& f2, int length)
 {
 	if(f1.momentumSign != f2.momentumSign)
 		return false;
@@ -71,7 +64,7 @@ static bool fit(const Pattern& f1, const Pattern& f2, double candleTolerance, do
 		abs_min = std::min(abs_min, std::min(f1.elements[i].low, f2.elements[i].low));
 		abs_max = std::max(abs_max, std::max(f1.elements[i].high, f2.elements[i].high));
 	}
-	double tolerance = (abs_max - abs_min) * candleTolerance;
+	double tolerance = (abs_max - abs_min) * m_params.candleFit;
 	for(int i = 0; i < length; i++)
 	{
 		if(fabs(f1.elements[i].open - f2.elements[i].open) > tolerance)
@@ -84,11 +77,14 @@ static bool fit(const Pattern& f1, const Pattern& f2, double candleTolerance, do
 			return false;
 		if((f1.elements[i].open - f1.elements[i].close) * (f2.elements[i].open - f2.elements[i].close) < 0)
 			return false;
-		if(f1.signature != f2.signature)
-			return false;
-		if(volumeTolerance > 0)
+		if(m_params.fitSignatures)
 		{
-			if(fabs(f1.elements[i].volume - f2.elements[i].volume) > volumeTolerance)
+			if(f1.signature != f2.signature)
+				return false;
+		}
+		if(m_params.volumeFit > 0)
+		{
+			if(fabs(f1.elements[i].volume - f2.elements[i].volume) > m_params.volumeFit)
 				return false;
 		}
 	}
@@ -126,7 +122,7 @@ static std::string calculateSignature(const Quotes::Ptr& q, size_t pos, int patt
 	return signature;
 }
 
-static std::vector<std::string> calculateSignatures(std::list<Quotes::Ptr>& qlist, int patternLength)
+static std::vector<std::string> calculateSignatures(std::vector<Quotes::Ptr>& qlist, int patternLength)
 {
 	std::vector<std::string> result;
 
@@ -143,6 +139,11 @@ static std::vector<std::string> calculateSignatures(std::list<Quotes::Ptr>& qlis
 	return result;
 }
 
+Miner::Miner()
+{
+
+}
+
 Miner::Miner(const Params& p) : m_params(p)
 {
 	assert(m_params.patternLength < MaxPatternLength);
@@ -152,7 +153,7 @@ Miner::~Miner()
 {
 }
 
-std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
+std::vector<Miner::Result> Miner::doMine(std::vector<Quotes::Ptr>& qlist)
 {
 	std::vector<std::string> signatures = calculateSignatures(qlist, m_params.patternLength);
 	std::vector<Result> result;
@@ -206,7 +207,7 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 				{
 					Pattern thisPattern = convertToRelativeUnits(*qscan, scanPos, m_params.patternLength, m_params.momentumOrder);
 					thisPattern.signature = signatures[scanIndex + scanPos];
-					if(fit(basePattern, thisPattern, m_params.candleFit, m_params.volumeFit, m_params.patternLength))
+					if(fit(basePattern, thisPattern, m_params.patternLength))
 					{
 						size_t nextPos = scanPos + m_params.patternLength;
 						size_t exitPos = scanPos + m_params.patternLength + m_params.exitAfter - 1;
@@ -319,5 +320,128 @@ std::vector<Miner::Result> Miner::mine(std::list<Quotes::Ptr>& qlist)
 		baseIndex += qbase->length();
 	}
 	return result;
+}
+
+
+void Miner::parseConfig(const Json::Value& root)
+{
+	auto minerRoot = root["miner"];
+	m_params.candleFit = root.get("candle-fit-tolerance", 0.1).asDouble();
+	m_params.volumeFit = root.get("volume-fit-tolerance", 0).asDouble();
+	m_params.patternLength = root.get("pattern-length", 2).asUInt();
+	m_params.limit = root.get("sample-percentage", -1).asDouble();
+	m_params.exitAfter = root.get("exit-after", 2).asUInt();
+	m_params.momentumOrder = root.get("momentum-order", -1).asInt();
+	m_params.fitSignatures = root.get("fit-signatures", false).asBool();
+
+	auto reportConfig = root["report"];
+	m_reportConfig.swap(reportConfig);
+}
+
+void Miner::setQuotes(const std::vector<Quotes::Ptr>& quotes)
+{
+	m_quotes = quotes;
+}
+
+void Miner::mine()
+{
+	m_results = doMine(m_quotes);
+}
+
+void Miner::makeReport(const ReportBuilder::Ptr& builder,
+		const std::string& filename)
+{
+	std::sort(m_results.begin(), m_results.end(),
+			[] (const Miner::Result& r1, const Miner::Result& r2) {
+				return r1.count > r2.count;
+			});
+
+	auto outputFilename = m_reportConfig.get("output-filename", filename).asString();
+	double filterP = m_reportConfig.get("filter-p", 0).asDouble();
+	double filterMean = m_reportConfig.get("filter-mean", 0).asDouble();
+	double filterMeanP = m_reportConfig.get("filter-mean-p", 0).asDouble();
+	int filterCount = m_reportConfig.get("filter-count", 0).asInt();
+	bool filterTrivial = m_reportConfig.get("filter-trivial", false).asBool();
+
+	builder->start(outputFilename, TimePoint(0, 0), TimePoint(0, 0), std::list<std::string>());
+	builder->begin_element("Parameters:");
+	builder->insert_text("Price tolerance: " + std::to_string(m_params.candleFit));
+	builder->insert_text("Volume tolerance: " + std::to_string(m_params.volumeFit));
+	builder->insert_text("Exit after: " + std::to_string(m_params.exitAfter) + " periods");
+	builder->insert_text("Momentum order: " + std::to_string(m_params.momentumOrder) + " periods");
+
+	if(filterP > 0)
+		builder->insert_text("Filter binomial p-value: < " + std::to_string(filterP));
+	if(filterMean > 0)
+		builder->insert_text("Filter absolute mean value: <" + std::to_string(filterMean));
+	if(filterMeanP > 0)
+		builder->insert_text("Filter absolute mean p-value: <" + std::to_string(filterMeanP));
+	if(filterCount > 0)
+		builder->insert_text("Filter pattern occurences: >" + std::to_string(filterCount));
+	builder->end_element();
+
+	int patternsCount = 0;
+	for(const auto& r : m_results)
+	{
+		if(filterP > 0)
+		{
+			if(r.p > filterP)
+				continue;
+		}
+
+		if(filterMean > 0)
+		{
+			if(fabs(r.mean) < filterMean)
+				continue;
+		}
+
+		if(filterCount > 0)
+		{
+			if(r.count < filterCount)
+				continue;
+		}
+
+		if(filterMeanP > 0)
+		{
+			if(r.mean_p > filterMeanP)
+				continue;
+		}
+
+		if(filterTrivial)
+		{
+			bool isTrivial = true;
+			for(const auto& e : r.elements)
+			{
+				if((e.open != 1) || (e.high != 1) || (e.low != 1) || (e.close != 1))
+				{
+					isTrivial = false;
+					break;
+				}
+			}
+			if(isTrivial)
+				continue;
+		}
+
+		builder->begin_element("Pattern: " + std::to_string(r.count) + " occurences");
+		builder->insert_fit_elements(r.elements);
+		builder->insert_text("mean = " + std::to_string(r.mean) + "; rejecting H0 at p-value: " +
+			  std::to_string(r.mean_p) + "; sigma = " + std::to_string(r.sigma));
+		builder->insert_text("Minmax returns: " + std::to_string(r.min_return) + "/" + std::to_string(r.max_return) +
+				"; median return: " + std::to_string(r.median));
+		builder->insert_text("+ returns: " + std::to_string((double)r.pos_returns / r.count) +
+				"; p-value: " + std::to_string(r.p));
+		builder->insert_text("min low: " + std::to_string(r.min_low) + "; max high: " + std::to_string(r.max_high));
+		builder->insert_text("mean +: " + std::to_string(r.mean_pos) + "; mean -: " + std::to_string(r.mean_neg));
+		if(m_params.momentumOrder > 0)
+			builder->insert_text("Momentum sign: " + std::to_string(r.momentumSign));
+		if(m_params.fitSignatures)
+			builder->insert_text("Signature: " + r.signature);
+		builder->end_element();
+
+		patternsCount += r.count;
+	}
+	builder->begin_element("Total patterns: " + std::to_string(patternsCount));
+	builder->end_element();
+	builder->end();
 }
 
