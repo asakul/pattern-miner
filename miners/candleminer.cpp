@@ -1,8 +1,8 @@
-#include "miner.h"
 #include <cassert>
 #include "log.h"
 #include <cmath>
 #include <boost/math/distributions.hpp> 
+#include "candleminer.h"
 
 using namespace boost::math;
 
@@ -21,11 +21,11 @@ struct SignatureElement
 	std::string sign;
 };
 
-static Miner::Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, int momentumOrder)
+static CandleMiner::Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int patternLength, int momentumOrder)
 {
 	auto startPrice = q[startPos].open;
 	double startVolume = q[startPos].volume;
-	Miner::Pattern pattern;
+	CandleMiner::Pattern pattern;
 	std::vector<double> signatureArray;
 	for(int i = 0; i < patternLength; i++)
 	{
@@ -52,7 +52,7 @@ static Miner::Pattern convertToRelativeUnits(Quotes& q, size_t startPos, int pat
 	return pattern;
 }
 
-bool Miner::fit(const Pattern& f1, const Pattern& f2, int length)
+bool CandleMiner::fit(const Pattern& f1, const Pattern& f2, int length)
 {
 	if(f1.momentumSign != f2.momentumSign)
 		return false;
@@ -139,21 +139,21 @@ static std::vector<std::string> calculateSignatures(std::vector<Quotes::Ptr>& ql
 	return result;
 }
 
-Miner::Miner()
+CandleMiner::CandleMiner()
 {
 
 }
 
-Miner::Miner(const Params& p) : m_params(p)
+CandleMiner::CandleMiner(const Params& p) : m_params(p)
 {
 	assert(m_params.patternLength < MaxPatternLength);
 }
 
-Miner::~Miner()
+CandleMiner::~CandleMiner()
 {
 }
 
-std::vector<Miner::Result> Miner::doMine(std::vector<Quotes::Ptr>& qlist)
+std::vector<CandleMiner::Result> CandleMiner::doMine(std::vector<Quotes::Ptr>& qlist)
 {
 	std::vector<std::string> signatures = calculateSignatures(qlist, m_params.patternLength);
 	std::vector<Result> result;
@@ -323,7 +323,7 @@ std::vector<Miner::Result> Miner::doMine(std::vector<Quotes::Ptr>& qlist)
 }
 
 
-void Miner::parseConfig(const Json::Value& root)
+void CandleMiner::parseConfig(const Json::Value& root)
 {
 	auto minerRoot = root["miner"];
 	m_params.candleFit = root.get("candle-fit-tolerance", 0.1).asDouble();
@@ -338,21 +338,21 @@ void Miner::parseConfig(const Json::Value& root)
 	m_reportConfig.swap(reportConfig);
 }
 
-void Miner::setQuotes(const std::vector<Quotes::Ptr>& quotes)
+void CandleMiner::setQuotes(const std::vector<Quotes::Ptr>& quotes)
 {
 	m_quotes = quotes;
 }
 
-void Miner::mine()
+void CandleMiner::mine()
 {
 	m_results = doMine(m_quotes);
 }
 
-void Miner::makeReport(const ReportBuilder::Ptr& builder,
+void CandleMiner::makeReport(const ReportBuilder::Ptr& builder,
 		const std::string& filename)
 {
 	std::sort(m_results.begin(), m_results.end(),
-			[] (const Miner::Result& r1, const Miner::Result& r2) {
+			[] (const CandleMiner::Result& r1, const CandleMiner::Result& r2) {
 				return r1.count > r2.count;
 			});
 

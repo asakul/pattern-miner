@@ -47,7 +47,7 @@ set(sources
 	miners/ttminer.cpp
 	miners/minmaxminer.cpp
 	miners/iminer.cpp
-	miner.cpp
+	miners/candleminer.cpp
 
 	report/textreportbuilder.cpp
 	report/htmlreportbuilder.cpp

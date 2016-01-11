@@ -6,7 +6,7 @@
 #include <list>
 #include "miners/iminer.h"
 
-class Miner : public IMiner
+class CandleMiner : public IMiner
 {
 public:
 	struct Result
@@ -50,9 +50,9 @@ public:
 		bool fitSignatures;
 	};
 
-	Miner();
-	Miner(const Params& p);
-	virtual ~Miner();
+	CandleMiner();
+	CandleMiner(const Params& p);
+	virtual ~CandleMiner();
 
 	virtual void parseConfig(const Json::Value& root);
 

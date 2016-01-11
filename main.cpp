@@ -1,7 +1,6 @@
 
 #include "log.h"
 #include "model/quotes.h"
-#include "miner.h"
 #include "miners/ttminer.h"
 #include "miners/minmaxminer.h"
 #include "optionparser/optionparser.h"
@@ -11,6 +10,7 @@
 #include "miners/iminer.h"
 #include "json/value.h"
 #include "json/reader.h"
+#include "miners/candleminer.h"
 
 using namespace boost;
 
@@ -247,7 +247,7 @@ int main(int argc, char** argv)
 	IMiner::Ptr miner;
 	if(s.minerType == minerCandle)
 	{
-		miner = std::make_shared<Miner>();
+		miner = std::make_shared<CandleMiner>();
 	}
 	else if(s.minerType == minerZigzag)
 	{
